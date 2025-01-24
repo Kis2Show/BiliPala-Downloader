@@ -11,7 +11,7 @@
 - 📁 自动整理到分类目录
 - 🔍 智能元数据提取（标题/UP主/封面等）
 - 🐳 Docker容器化部署
-- 📊 下载历史记录追踪
+- � 下载历史记录追踪
 
 ## 快速开始
 
@@ -52,7 +52,7 @@ docker build -t bilibili-audio .
 
 # 运行容器（将/path/to/config映射到容器内）
 docker run -it --rm \
-  -v /path/to/config:/app/config \
+  -v /path/to/config:/app/config \  # 用于存放.env配置文件
   -v /path/to/downloads:/app/audiobooks \
   bilibili-audio
 ```

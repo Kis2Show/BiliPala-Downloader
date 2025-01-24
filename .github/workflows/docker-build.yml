@@ -1,4 +1,4 @@
-name: Docker Build
+name: Docker Build for arm64 and amd64
 
 on:
   push:

@@ -1,5 +1,5 @@
 # 构建阶段
-FROM python:3.9-alpine AS builder
+FROM --platform=$BUILDPLATFORM python:3.9-alpine AS builder
 
 WORKDIR /app
 
@@ -9,7 +9,8 @@ RUN apk add --no-cache \
     libffi-dev \
     openssl-dev \
     zlib-dev \
-    jpeg-dev
+    jpeg-dev \
+    ffmpeg-dev
 
 # 安装Python依赖
 COPY requirements.txt .

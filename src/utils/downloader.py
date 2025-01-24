@@ -40,6 +40,7 @@ class BiliDownloader:
         os.makedirs(self.history_dir, exist_ok=True)
         self.history_file = os.path.join(self.history_dir, "history.json")
         self.download_history = self.load_download_history()
+        self.cover_queue = []  # 封面处理队列
         logger.info("BiliDownloader 初始化完成")
     
     def load_download_history(self) -> dict:
@@ -69,9 +70,9 @@ class BiliDownloader:
         key_str = f"{bvid}_p{p}_{title}"
         return hashlib.md5(key_str.encode('utf-8')).hexdigest()
     
-    def is_downloaded(self, bvid: str, p: int, info: dict) -> tuple[bool, str]:
+    def is_downloaded(self, bvid: str, p: int, info: dict) -> tuple[bool, str, bool]:
         """检查视频是否已下载
-        返回：(是否已下载，已下载文件路径)
+        返回：(是否已下载，已下载文件路径，是否支持续传)
         """
         title = info.get('title', '')
         video_key = self.get_video_key(bvid, p, title)
@@ -82,15 +83,23 @@ class BiliDownloader:
             
             # 检查文件是否存在
             if mp3_path and os.path.exists(mp3_path):
-                logger.info(f"找到历史下载记录：{mp3_path}")
-                return True, mp3_path
+                # 检查文件是否完整
+                expected_size = history_info.get('file_size', 0)
+                actual_size = os.path.getsize(mp3_path)
+                
+                if actual_size >= expected_size:
+                    logger.info(f"找到完整的历史下载记录：{mp3_path}")
+                    return True, mp3_path, False
+                else:
+                    logger.info(f"找到不完整的历史下载记录：{mp3_path} ({actual_size}/{expected_size} bytes)")
+                    return False, mp3_path, True
             else:
                 # 如果文件不存在，删除历史记录
                 logger.info(f"历史文件不存在，清除记录：{mp3_path}")
                 del self.download_history[video_key]
                 self.save_download_history()
         
-        return False, ""
+        return False, "", False
     
     def add_download_history(self, bvid: str, p: int, file_path: str, info: dict):
         """添加下载历史记录"""
@@ -303,9 +312,35 @@ class BiliDownloader:
     def download(self, bvid: str, output_dir: str, rename: bool = False) -> Generator[Dict[str, Any], None, None]:
         """下载音频文件"""
         start_time = datetime.now()
-        base_path = os.path.join("audiobooks", output_dir)
+        base_path = os.path.join(os.getenv('DOWNLOAD_DIR', 'Audiobooks'), output_dir)
         os.makedirs(base_path, exist_ok=True)
         logger.info(f"创建输出目录：{base_path}")
+
+        # 加载下载配置
+        max_retries = int(os.getenv('MAX_RETRIES', '3'))
+        timeout = int(os.getenv('TIMEOUT', '30'))
+        concurrent_downloads = int(os.getenv('CONCURRENT_DOWNLOADS', '5'))
+
+        # 进度回调函数
+        def progress_hook(d):
+            if d['status'] == 'downloading':
+                percent = d.get('_percent_str', '0%').strip('%')
+                yield {
+                    'status': 'progress',
+                    'progress': float(percent),
+                    'speed': d.get('_speed_str', 'N/A'),
+                    'eta': d.get('_eta_str', 'N/A')
+                }
+
+        # 封面处理函数
+        def process_covers():
+            while self.cover_queue:
+                mp3_path, cover_data = self.cover_queue.pop(0)
+                try:
+                    self.embed_cover(mp3_path, cover_data)
+                    logger.info(f"成功处理封面：{os.path.basename(mp3_path)}")
+                except Exception as e:
+                    logger.error(f"处理封面失败：{os.path.basename(mp3_path)} - {str(e)}")
         
         count = self.check_playlist(bvid)
         logger.info(f"准备下载 {count} 个视频")
@@ -316,12 +351,18 @@ class BiliDownloader:
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
-                'preferredquality': '192',
+                'preferredquality': os.getenv('AUDIO_QUALITY', '192k'),
             }],
-            'writethumbnail': True,
+            'writethumbnail': False,  # 先不下载封面
             'ignoreerrors': True,
             'quiet': False,
             'no_warnings': False,
+            'continuedl': True,  # 支持断点续传
+            'noprogress': False,
+            'progress_hooks': [progress_hook],
+            'retries': max_retries,
+            'socket_timeout': timeout,
+            'concurrent_fragment_downloads': concurrent_downloads,
         }
         
         success_count = 0
@@ -337,8 +378,8 @@ class BiliDownloader:
                 with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
                     info = ydl.extract_info(url, download=False)
                 
-                # 检查是否已下载
-                is_downloaded, existing_file = self.is_downloaded(bvid, p, info)
+                # 检查是否已下载，支持断点续传
+                is_downloaded, existing_file, can_resume = self.is_downloaded(bvid, p, info)
                 if is_downloaded:
                     logger.info(f"跳过已下载的文件：{existing_file}")
                     skip_count += 1
@@ -348,6 +389,9 @@ class BiliDownloader:
                         'progress': (p / count) * 100
                     }
                     continue
+                elif can_resume:
+                    logger.info(f"发现不完整文件，尝试断点续传：{existing_file}")
+                    ydl_opts['outtmpl'] = existing_file
                 
                 # 下载新文件
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -365,14 +409,18 @@ class BiliDownloader:
                     
                     logger.info(f"音频下载完成：{os.path.basename(mp3_filename)}")
                     
-                    # 获取并嵌入封面
+                    # 获取封面并加入处理队列
                     cover_data = self.get_cover_image(info)
                     if cover_data:
-                        # 等待一段时间确保文件写入完成
-                        time.sleep(2)
-                        self.embed_cover(mp3_filename, cover_data)
+                        self.cover_queue.append((mp3_filename, cover_data))
+                        logger.info(f"封面已加入处理队列：{os.path.basename(mp3_filename)}")
                     else:
                         logger.warning("无法获取封面图片")
+
+                    # 如果所有音频下载完成，开始处理封面
+                    if p == count:
+                        logger.info("所有音频下载完成，开始处理封面")
+                        process_covers()
                     
                     final_filename = mp3_filename
                     if rename:

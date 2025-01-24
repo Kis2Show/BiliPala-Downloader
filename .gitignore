@@ -11,3 +11,11 @@ ffmpeg*.zip
 .env
 *.log
 *.tmp
+
+# Audio books
+Audiobooks/
+
+# Test files
+tests/
+*.pyc
+__pycache__/

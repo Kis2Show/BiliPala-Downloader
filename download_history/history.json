@@ -119,5 +119,93 @@
     "duration": 1003.055,
     "uploader": "文廷有声书",
     "upload_date": "20250121"
+  },
+  "d426e90527417c9d547c8823658fc9aa": {
+    "bvid": "BV11UqJYaEpB",
+    "p": 1,
+    "title": "164.刑侦八虎之爆炸专家高光斗：怎样从爆炸现场找出凶手",
+    "file_path": "Audiobooks\\test\\164.刑侦八虎之爆炸专家高光斗：怎样从爆炸现场找出凶手.mp3",
+    "download_time": "2025-01-25T08:58:39.149292",
+    "file_size": 46076310,
+    "duration": 2873.376,
+    "uploader": "张永泉讲医疗安全",
+    "upload_date": "20241208"
+  },
+  "d3646ef00e8f318966cde9cc1ed94e26": {
+    "bvid": "BV1QfiUYWErX",
+    "p": 1,
+    "title": "3.黄金案：狄仁杰是个胖胖还是文武双全？",
+    "file_path": "Audiobooks\\test\\3.黄金案：狄仁杰是个胖胖还是文武双全？.mp3",
+    "download_time": "2025-01-25T09:00:41.831196",
+    "file_size": 53274338,
+    "duration": 3322.939,
+    "uploader": "张永泉讲医疗安全",
+    "upload_date": "20241205"
+  },
+  "e4f788820eef213ca3388e6c5f4670c6": {
+    "bvid": "BV1gkz1YJEEb",
+    "p": 1,
+    "title": "2.狱门岛：所有人都疯了，你该怎么办？",
+    "file_path": "Audiobooks\\test\\2.狱门岛：所有人都疯了，你该怎么办？.mp3",
+    "download_time": "2025-01-25T10:19:20.622056",
+    "file_size": 53263119,
+    "duration": 3328.911,
+    "uploader": "张永泉讲医疗安全",
+    "upload_date": "20241204"
+  },
+  "83766bcb619a594fda0fac1fae9074e0": {
+    "bvid": "BV1MbrfYWEF3",
+    "p": 1,
+    "title": "16.控方证人：这到底是个可恨还是可怜的女人？",
+    "file_path": "Audiobooks\\test\\16.控方证人：这到底是个可恨还是可怜的女人？.mp3",
+    "download_time": "2025-01-25T10:37:10.719729",
+    "file_size": 48858477,
+    "duration": 3047.263,
+    "uploader": "张永泉讲医疗安全",
+    "upload_date": "20241220"
+  },
+  "6c1526df42830aa14448b2cdf5eb4ffd": {
+    "bvid": "BV1V4CFYqErJ",
+    "p": 1,
+    "title": "24.12怒汉：12个人该如何决定人的生死",
+    "file_path": "Audiobooks\\test\\test-1.mp3",
+    "download_time": "2025-01-25T10:55:01.667502",
+    "file_size": 54677456,
+    "duration": 3410.602,
+    "uploader": "张永泉讲医疗安全",
+    "upload_date": "20241228"
+  },
+  "68c4b9815591c5c793d2369554eac227": {
+    "bvid": "BV1biCFYhEtf",
+    "p": 1,
+    "title": "26.罗生门：真相究竟是什么？",
+    "file_path": "Audiobooks\\test\\26.罗生门：真相究竟是什么？.mp3",
+    "download_time": "2025-01-25T11:11:08.019706",
+    "file_size": 54415323,
+    "duration": 3394.277,
+    "uploader": "张永泉讲医疗安全",
+    "upload_date": "20241230"
+  },
+  "66e586a597cccfb980afb04ba2b0ddc4": {
+    "bvid": "BV1pTcReDEyu",
+    "p": 1,
+    "title": "48.电话谋杀案：如何把看似无辜的丈夫绳之以法？",
+    "file_path": "Audiobooks\\test\\48.电话谋杀案：如何把看似无辜的丈夫绳之以法？.mp3",
+    "download_time": "2025-01-25T11:27:17.912960",
+    "file_size": 66080763,
+    "duration": 4123.839,
+    "uploader": "张永泉讲医疗安全",
+    "upload_date": "20250121"
+  },
+  "e67d70bf5138103d3968658244b74246": {
+    "bvid": "BV1kYw8eSEBx",
+    "p": 1,
+    "title": "51.谜中谜：恋爱脑傻白甜卷入巨款大劫案",
+    "file_path": "Audiobooks\\test\\51.谜中谜：恋爱脑傻白甜卷入巨款大劫案.mp3",
+    "download_time": "2025-01-25T11:47:47.231046",
+    "file_size": 69857520,
+    "duration": 4360.208,
+    "uploader": "张永泉讲医疗安全",
+    "upload_date": "20250124"
   }
 }

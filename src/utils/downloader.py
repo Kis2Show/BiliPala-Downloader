@@ -37,10 +37,13 @@ class BiliDownloader:
         }
         self.base_url = "https://www.bilibili.com/video/"
         self.history_dir = "download_history"
+        self.task_dir = "download_tasks"
         os.makedirs(self.history_dir, exist_ok=True)
+        os.makedirs(self.task_dir, exist_ok=True)
         self.history_file = os.path.join(self.history_dir, "history.json")
         self.download_history = self.load_download_history()
         self.cover_queue = []  # 封面处理队列
+        self.active_tasks = {}  # 当前活动任务
         logger.info("BiliDownloader 初始化完成")
     
     def load_download_history(self) -> dict:
@@ -291,6 +294,39 @@ class BiliDownloader:
             logger.error(f"检查播放列表时出错：{str(e)}")
             return 1
     
+    def save_task_state(self, task_id: str, state: dict):
+        """保存任务状态"""
+        task_file = os.path.join(self.task_dir, f"{task_id}.json")
+        try:
+            with open(task_file, 'w', encoding='utf-8') as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+            logger.info(f"任务状态已保存：{task_id}")
+        except Exception as e:
+            logger.error(f"保存任务状态失败：{str(e)}")
+
+    def load_task_state(self, task_id: str) -> dict:
+        """加载任务状态"""
+        task_file = os.path.join(self.task_dir, f"{task_id}.json")
+        try:
+            if os.path.exists(task_file):
+                with open(task_file, 'r', encoding='utf-8') as f:
+                    state = json.load(f)
+                logger.info(f"加载任务状态：{task_id}")
+                return state
+        except Exception as e:
+            logger.error(f"加载任务状态失败：{str(e)}")
+        return {}
+
+    def cleanup_task_state(self, task_id: str):
+        """清理已完成任务状态"""
+        task_file = os.path.join(self.task_dir, f"{task_id}.json")
+        try:
+            if os.path.exists(task_file):
+                os.remove(task_file)
+                logger.info(f"清理任务状态文件：{task_id}")
+        except Exception as e:
+            logger.error(f"清理任务状态文件失败：{str(e)}")
+
     def wait_for_file(self, filepath: str, timeout: int = 30) -> bool:
         """等待文件出现并可访问"""
         logger.info(f"等待文件：{os.path.basename(filepath)}")
@@ -315,6 +351,16 @@ class BiliDownloader:
         base_path = os.path.join(os.getenv('DOWNLOAD_DIR', 'Audiobooks'), output_dir)
         os.makedirs(base_path, exist_ok=True)
         logger.info(f"创建输出目录：{base_path}")
+
+        # 生成任务ID
+        task_id = hashlib.md5(f"{bvid}_{output_dir}".encode('utf-8')).hexdigest()
+        self.active_tasks[task_id] = {
+            'bvid': bvid,
+            'output_dir': output_dir,
+            'start_time': start_time.isoformat(),
+            'status': 'running'
+        }
+        self.save_task_state(task_id, self.active_tasks[task_id])
 
         # 加载下载配置
         max_retries = int(os.getenv('MAX_RETRIES', '3'))
@@ -483,6 +529,12 @@ class BiliDownloader:
                     continue
                 else:
                     logger.error(f"视频 {p} 下载失败，已达到最大重试次数")
+                    # 更新任务状态
+                    self.active_tasks[task_id]['status'] = 'failed'
+                    self.active_tasks[task_id]['end_time'] = datetime.now().isoformat()
+                    self.active_tasks[task_id]['error'] = str(e)
+                    self.save_task_state(task_id, self.active_tasks[task_id])
+                    self.cleanup_task_state(task_id)
                     break
         
         end_time = datetime.now()
@@ -493,3 +545,10 @@ class BiliDownloader:
         logger.info(f"跳过：{skip_count} 个")
         logger.info(f"失败：{error_count} 个")
         logger.info(f"总耗时：{duration.total_seconds():.1f} 秒")
+
+        # 更新任务状态
+        self.active_tasks[task_id]['status'] = 'completed'
+        self.active_tasks[task_id]['end_time'] = end_time.isoformat()
+        self.active_tasks[task_id]['duration'] = duration.total_seconds()
+        self.save_task_state(task_id, self.active_tasks[task_id])
+        self.cleanup_task_state(task_id)

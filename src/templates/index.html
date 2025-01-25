@@ -73,33 +73,152 @@
             <button id="checkList" class="btn btn-secondary">检查列表</button>
             <button id="startDownload" class="btn btn-primary">开始下载</button>
         </div>
+
+        <div class="task-list mb-3" id="taskListContainer" style="display: none;">
+            <h6 class="mb-3 text-muted">当前任务</h6>
+            <div id="taskList" class="list-group">
+                <div class="list-group-item text-muted" id="noTasksMessage">无下载任务</div>
+            </div>
+        </div>
     </div>
+<script>
+    // 保存用户输入到localStorage
+    function saveInputs() {
+        const inputs = {
+            url: document.getElementById('biliUrl').value,
+            outputDir: document.getElementById('outputDir').value,
+            rename: document.getElementById('renameFiles').checked
+        };
+        localStorage.setItem('lastInputs', JSON.stringify(inputs));
+    }
 
-    <script>
-        function showStatus() {
-            document.querySelector('.status-container').style.display = 'block';
+    // 恢复用户输入
+    function restoreInputs() {
+        const inputs = JSON.parse(localStorage.getItem('lastInputs') || '{}');
+        if (inputs.url) {
+            document.getElementById('biliUrl').value = inputs.url;
         }
+        if (inputs.outputDir) {
+            document.getElementById('outputDir').value = inputs.outputDir;
+        }
+        if (inputs.rename !== undefined) {
+            document.getElementById('renameFiles').checked = inputs.rename;
+        }
+    }
 
-        function updateStatus(text, progress = null) {
-            document.getElementById('status-text').textContent = text;
-            if (progress !== null) {
-                const progressBar = document.querySelector('.progress-bar');
-                const progressText = document.querySelector('.progress-text');
-                progressBar.style.width = `${progress}%`;
-                progressText.textContent = `${Math.round(progress)}%`;
-                if (progress > 50) {
-                    progressText.style.color = '#fff';
-                } else {
-                    progressText.style.color = '#000';
-                }
+    // 获取最新任务状态
+    async function checkLatestTask() {
+        try {
+            const response = await fetch('/latest_task');
+            const data = await response.json();
+            
+            if (data.error) {
+                console.log('没有找到进行中的任务');
+                return;
+            }
+
+            // 恢复输入
+            document.getElementById('biliUrl').value = `https://www.bilibili.com/video/${data.bvid}`;
+            document.getElementById('outputDir').value = data.output_dir;
+            
+            // 更新状态
+            showStatus();
+            updateStatus(`任务状态: ${data.status}`, data.progress);
+            
+            // 如果是进行中的任务，开始轮询状态
+            if (data.status === 'running') {
+                setInterval(async () => {
+                    const taskId = await getTaskId();
+                    const statusResponse = await fetch(`/task_status?task_id=${taskId}`);
+                    const statusData = await statusResponse.json();
+                    if (!statusData.error) {
+                        updateStatus(`任务状态: ${statusData.status}`, statusData.progress);
+                    }
+                }, 5000);
+            }
+        } catch (error) {
+            console.error('获取最新任务失败:', error);
+        }
+    }
+
+    function showStatus() {
+        document.querySelector('.status-container').style.display = 'block';
+    }
+
+    function updateStatus(text, progress = null) {
+        document.getElementById('status-text').textContent = text;
+        if (progress !== null) {
+            const progressBar = document.querySelector('.progress-bar');
+            const progressText = document.querySelector('.progress-text');
+            progressBar.style.width = `${progress}%`;
+            progressText.textContent = `${Math.round(progress)}%`;
+            if (progress > 50) {
+                progressText.style.color = '#fff';
+            } else {
+                progressText.style.color = '#000';
             }
         }
+    }
 
         function extractBvid(url) {
             const match = url.match(/BV[a-zA-Z0-9]+/);
             return match ? match[0] : null;
         }
 
+        // 初始化页面
+        document.addEventListener('DOMContentLoaded', () => {
+            restoreInputs();
+            loadTaskList();
+        });
+
+        // 加载任务列表
+        async function loadTaskList() {
+            try {
+                const response = await fetch('/download_history');
+                const data = await response.json();
+                const taskList = document.getElementById('taskList');
+                const noTasksMessage = document.getElementById('noTasksMessage');
+                
+                const taskListContainer = document.getElementById('taskListContainer');
+                const title = taskListContainer.querySelector('h6');
+                taskList.innerHTML = '';
+                
+                if (data.tasks.length) {
+                    title.classList.remove('text-muted');
+                    noTasksMessage.style.display = 'none';
+                } else {
+                    title.classList.add('text-muted');
+                    noTasksMessage.style.display = 'block';
+                }
+
+                data.tasks.forEach(task => {
+                    const taskItem = document.createElement('div');
+                    taskItem.className = 'list-group-item';
+                    taskItem.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-bold">${task.bvid}</div>
+                                <div class="text-muted small">状态: ${task.status}</div>
+                                <div class="text-muted small">进度: ${task.progress || 0}%</div>
+                            </div>
+                            <div class="text-end">
+                                <div class="text-muted small">${new Date(task.last_update).toLocaleString()}</div>
+                            </div>
+                        </div>
+                    `;
+                    taskList.appendChild(taskItem);
+                });
+            } catch (error) {
+                console.error('加载任务列表失败:', error);
+            }
+        }
+
+        // 为输入框添加保存事件
+        document.getElementById('biliUrl').addEventListener('input', saveInputs);
+        document.getElementById('outputDir').addEventListener('input', saveInputs);
+        document.getElementById('renameFiles').addEventListener('change', saveInputs);
+
+        // 事件监听器
         document.getElementById('checkList').addEventListener('click', async () => {
             const url = document.getElementById('biliUrl').value;
             const bvid = extractBvid(url);
@@ -162,6 +281,35 @@
                 updateStatus('下载过程中断');
                 eventSource.close();
             };
+        });
+
+        document.getElementById('checkStatus').addEventListener('click', async () => {
+            const url = document.getElementById('biliUrl').value;
+            const outputDir = document.getElementById('outputDir').value;
+            const bvid = extractBvid(url);
+            
+            if (!bvid || !outputDir) {
+                alert('请填写所有必要信息');
+                return;
+            }
+
+            const taskId = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(`${bvid}_${outputDir}`))
+                .then(hash => Array.from(new Uint8Array(hash))
+                    .map(b => b.toString(16).padStart(2, '0'))
+                    .join('').substring(0, 32));
+
+            try {
+                const response = await fetch(`/task_status?task_id=${taskId}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    updateStatus(`任务状态查询失败: ${data.error}`);
+                } else {
+                    updateStatus(`任务状态: ${data.status}`);
+                }
+            } catch (error) {
+                updateStatus(`查询任务状态出错: ${error.message}`);
+            }
         });
     </script>
 </body>

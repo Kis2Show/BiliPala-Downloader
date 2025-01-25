@@ -3,7 +3,7 @@ import os
 import re
 import requests
 from typing import Generator, Dict, Any
-from PIL import Image, ImageFilter, ImageOps
+from PIL import Image, ImageFilter, ImageOps, ImageDraw
 from io import BytesIO
 import mutagen
 from mutagen.mp3 import MP3
@@ -13,6 +13,9 @@ from datetime import datetime
 import time
 import json
 import hashlib
+import threading
+import random
+import math
 
 # 配置日志
 logging.basicConfig(
@@ -134,29 +137,10 @@ class BiliDownloader:
         logger.info(f"成功提取 BV 号：{bvid}")
         return bvid
     
-    def get_cover_image(self, info: dict) -> bytes:
-        """获取并处理封面图片"""
+    def get_cover_image(self, info):
         try:
-            # 首先尝试从 info 中获取封面 URL
-            cover_url = None
-            if 'thumbnail' in info:
-                cover_url = info['thumbnail']
-            elif 'thumbnails' in info and info['thumbnails']:
-                # 选择最高质量的缩略图
-                cover_url = info['thumbnails'][-1]['url']
-            
-            if not cover_url:
-                # 尝试从网页中提取封面 URL
-                webpage_url = info.get('webpage_url')
-                if webpage_url:
-                    response = requests.get(webpage_url, headers=self.headers)
-                    if response.status_code == 200:
-                        # 在页面内容中查找封面 URL
-                        pattern = r'"coverUrl":"([^"]+)"'
-                        match = re.search(pattern, response.text)
-                        if match:
-                            cover_url = match.group(1)
-
+            # 尝试获取封面URL
+            cover_url = info.get('thumbnail')
             if cover_url:
                 logger.info(f"找到封面 URL: {cover_url}")
                 response = requests.get(cover_url, headers=self.headers)
@@ -220,27 +204,35 @@ class BiliDownloader:
                     logger.info(f"封面处理完成：{original_size} -> (400x400)")
                     return output.getvalue()
             else:
-                logger.warning("未找到封面 URL")
+                logger.warning("未找到封面URL")
+                return None
         except Exception as e:
-            logger.error(f"处理封面时出错：{str(e)}")
-        return None
+            logger.error(f"获取封面图片失败: {str(e)}")
+            return None
 
     def embed_cover(self, mp3_path: str, cover_data: bytes):
         """将封面嵌入到 MP3 文件中"""
+        if not cover_data:
+            logger.warning(f"没有封面数据，跳过封面嵌入：{os.path.basename(mp3_path)}")
+            return
+
         try:
             logger.info(f"开始为音频文件添加封面：{os.path.basename(mp3_path)}")
-            # 等待文件可用
-            for _ in range(10):  # 最多等待 10 秒
+            
+            # 等待文件可用，最多等待10秒
+            for _ in range(10):
                 if os.path.exists(mp3_path):
-                    break
+                    # 检查文件是否完整（不是正在写入状态）
+                    try:
+                        with open(mp3_path, 'rb') as f:
+                            f.seek(-128, 2)  # 尝试读取文件末尾
+                        break
+                    except:
+                        pass
                 time.sleep(1)
-            
-            if not os.path.exists(mp3_path):
-                raise FileNotFoundError(f"找不到 MP3 文件：{mp3_path}")
-            
-            # 等待文件写入完成
-            time.sleep(1)
-            
+            else:
+                raise FileNotFoundError(f"等待MP3文件超时：{mp3_path}")
+
             audio = MP3(mp3_path, ID3=ID3)
             
             # 如果没有 ID3 标签，创建一个
@@ -251,17 +243,20 @@ class BiliDownloader:
             # 添加封面
             audio.tags.add(
                 APIC(
-                    encoding=3,  # UTF-8
+                    encoding=3,
                     mime='image/jpeg',
                     type=3,  # 封面图片
                     desc='Cover',
                     data=cover_data
                 )
             )
-            audio.save()
+            
+            # 保存更改
+            audio.save(v2_version=3)
             logger.info("封面添加成功")
+            
         except Exception as e:
-            logger.error(f"添加封面时出错：{str(e)}")
+            logger.error(f"添加封面失败：{str(e)}")
     
     def check_playlist(self, bvid: str) -> int:
         """检查播放列表中的视频数量"""
@@ -358,7 +353,8 @@ class BiliDownloader:
             'bvid': bvid,
             'output_dir': output_dir,
             'start_time': start_time.isoformat(),
-            'status': 'running'
+            'status': 'running',
+            'progress': 0
         }
         self.save_task_state(task_id, self.active_tasks[task_id])
 
@@ -367,30 +363,44 @@ class BiliDownloader:
         timeout = int(os.getenv('TIMEOUT', '30'))
         concurrent_downloads = int(os.getenv('CONCURRENT_DOWNLOADS', '5'))
 
+        # 创建一个队列来存储进度信息
+        progress_queue = []
+
         # 进度回调函数
         def progress_hook(d):
             if d['status'] == 'downloading':
-                percent = d.get('_percent_str', '0%').strip('%')
-                yield {
-                    'status': 'progress',
-                    'progress': float(percent),
-                    'speed': d.get('_speed_str', 'N/A'),
-                    'eta': d.get('_eta_str', 'N/A')
-                }
-
-        # 封面处理函数
-        def process_covers():
-            while self.cover_queue:
-                mp3_path, cover_data = self.cover_queue.pop(0)
                 try:
-                    self.embed_cover(mp3_path, cover_data)
-                    logger.info(f"成功处理封面：{os.path.basename(mp3_path)}")
-                except Exception as e:
-                    logger.error(f"处理封面失败：{os.path.basename(mp3_path)} - {str(e)}")
-        
-        count = self.check_playlist(bvid)
-        logger.info(f"准备下载 {count} 个视频")
-        
+                    # 尝试从 _percent_str 获取进度
+                    if '_percent_str' in d:
+                        percent = float(d['_percent_str'].strip('%'))
+                    # 如果没有 _percent_str，尝试从已下载字节和总字节计算
+                    elif 'downloaded_bytes' in d and 'total_bytes' in d:
+                        percent = (d['downloaded_bytes'] / d['total_bytes']) * 100
+                    # 如果都没有，使用预估总字节
+                    elif 'downloaded_bytes' in d and 'total_bytes_estimate' in d:
+                        percent = (d['downloaded_bytes'] / d['total_bytes_estimate']) * 100
+                    else:
+                        percent = 0
+
+                    progress_queue.append({
+                        'status': 'progress',
+                        'progress': percent,
+                        'speed': d.get('_speed_str', 'N/A'),
+                        'eta': d.get('_eta_str', 'N/A'),
+                        'title': d.get('info_dict', {}).get('title', '')
+                    })
+                except (ValueError, ZeroDivisionError):
+                    pass
+            elif d['status'] == 'finished':
+                progress_queue.append({
+                    'status': 'progress',
+                    'progress': 100,
+                    'speed': 'N/A',
+                    'eta': '0s',
+                    'title': d.get('info_dict', {}).get('title', '')
+                })
+
+        # 配置下载选项
         ydl_opts = {
             'format': 'bestaudio/best',
             'outtmpl': os.path.join(base_path, '%(title)s.%(ext)s'),
@@ -410,7 +420,31 @@ class BiliDownloader:
             'socket_timeout': timeout,
             'concurrent_fragment_downloads': concurrent_downloads,
         }
-        
+
+        count = self.check_playlist(bvid)
+        logger.info(f"准备下载 {count} 个视频")
+
+        # 在下载过程中定期检查进度队列
+        def check_progress():
+            while progress_queue:
+                yield progress_queue.pop(0)
+
+        # 在下载过程中定期更新进度
+        def update_progress():
+            for progress_info in check_progress():
+                if progress_info:
+                    yield progress_info
+
+        # 封面处理函数
+        def process_covers():
+            while self.cover_queue:
+                mp3_path, cover_data = self.cover_queue.pop(0)
+                try:
+                    self.embed_cover(mp3_path, cover_data)
+                    logger.info(f"成功处理封面：{os.path.basename(mp3_path)}")
+                except Exception as e:
+                    logger.error(f"处理封面失败：{os.path.basename(mp3_path)} - {str(e)}")
+
         success_count = 0
         skip_count = 0
         error_count = 0
@@ -423,6 +457,7 @@ class BiliDownloader:
                 # 首先获取视频信息
                 with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
                     info = ydl.extract_info(url, download=False)
+                    title = info.get('title', '')
                 
                 # 检查是否已下载，支持断点续传
                 is_downloaded, existing_file, can_resume = self.is_downloaded(bvid, p, info)
@@ -432,7 +467,8 @@ class BiliDownloader:
                     yield {
                         'status': 'skip',
                         'message': f'已跳过重复文件：{os.path.basename(existing_file)}',
-                        'progress': (p / count) * 100
+                        'progress': (p / count) * 100,
+                        'title': title
                     }
                     continue
                 elif can_resume:
@@ -442,66 +478,90 @@ class BiliDownloader:
                 # 下载新文件
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     logger.info("开始下载音频")
-                    info = ydl.extract_info(url, download=True)
                     
-                    # 获取原始文件名（不带扩展名）
-                    basename = os.path.splitext(ydl.prepare_filename(info))[0]
-                    logger.info(f"基础文件名：{os.path.basename(basename)}")
+                    # 创建下载线程
+                    download_thread = threading.Thread(
+                        target=ydl.download,
+                        args=([url],)
+                    )
+                    download_thread.start()
                     
-                    # 等待 MP3 文件出现
-                    mp3_filename = f"{basename}.mp3"
-                    if not self.wait_for_file(mp3_filename):
-                        raise FileNotFoundError("MP3 文件生成失败")
+                    # 在主线程中检查进度
+                    while download_thread.is_alive():
+                        # 检查进度队列
+                        while progress_queue:
+                            progress_info = progress_queue.pop(0)
+                            yield progress_info
+                        time.sleep(0.1)  # 避免过于频繁的检查
                     
-                    logger.info(f"音频下载完成：{os.path.basename(mp3_filename)}")
+                    # 确保获取最后的进度信息
+                    while progress_queue:
+                        progress_info = progress_queue.pop(0)
+                        yield progress_info
                     
-                    # 获取封面并加入处理队列
-                    cover_data = self.get_cover_image(info)
-                    if cover_data:
-                        self.cover_queue.append((mp3_filename, cover_data))
-                        logger.info(f"封面已加入处理队列：{os.path.basename(mp3_filename)}")
-                    else:
-                        logger.warning("无法获取封面图片")
+                    download_thread.join()
+                    info = ydl.extract_info(url, download=False)
+                    title = info.get('title', '')
+                
+                # 获取原始文件名（不带扩展名）
+                basename = os.path.splitext(ydl.prepare_filename(info))[0]
+                logger.info(f"基础文件名：{os.path.basename(basename)}")
+                
+                # 等待 MP3 文件出现
+                mp3_filename = f"{basename}.mp3"
+                if not self.wait_for_file(mp3_filename):
+                    raise FileNotFoundError("MP3 文件生成失败")
+                
+                logger.info(f"音频下载完成：{os.path.basename(mp3_filename)}")
+                
+                # 获取封面并加入处理队列
+                cover_data = self.get_cover_image(info)
+                if cover_data:
+                    self.cover_queue.append((mp3_filename, cover_data))
+                    logger.info(f"封面已加入处理队列：{os.path.basename(mp3_filename)}")
+                else:
+                    logger.warning("无法获取封面图片")
 
-                    # 如果所有音频下载完成，开始处理封面
-                    if p == count:
-                        logger.info("所有音频下载完成，开始处理封面")
-                        process_covers()
-                    
-                    final_filename = mp3_filename
-                    if rename:
-                        new_filename = os.path.join(base_path, f"{output_dir}-{p}.mp3")
-                        if os.path.exists(mp3_filename):
-                            logger.info(f"重命名文件：{os.path.basename(mp3_filename)} -> {os.path.basename(new_filename)}")
-                            os.rename(mp3_filename, new_filename)
-                            final_filename = new_filename
-                    
-                    # 添加到下载历史
-                    self.add_download_history(bvid, p, final_filename, info)
-                    
-                    # 清理临时文件
-                    try:
-                        # 清理 JSON 文件
-                        info_json = f"{basename}.info.json"
-                        if os.path.exists(info_json):
-                            os.remove(info_json)
-                            logger.info("清理临时 JSON 文件")
-                            
-                        # 清理其他可能的临时文件
-                        for ext in ['.m4a', '.webm', '.part', '.ytdl']:
-                            temp_file = f"{basename}{ext}"
-                            if os.path.exists(temp_file):
-                                os.remove(temp_file)
-                                logger.info(f"清理临时文件：{os.path.basename(temp_file)}")
-                    except Exception as e:
-                        logger.warning(f"清理临时文件失败：{str(e)}")
-                    
-                    success_count += 1
-                    yield {
-                        'status': 'success',
-                        'message': f'已下载：{os.path.basename(final_filename)}',
-                        'progress': (p / count) * 100
-                    }
+                # 如果所有音频下载完成，开始处理封面
+                if p == count:
+                    logger.info("所有音频下载完成，开始处理封面")
+                    process_covers()
+                
+                final_filename = mp3_filename
+                if rename:
+                    new_filename = os.path.join(base_path, f"{output_dir}-{p}.mp3")
+                    if os.path.exists(mp3_filename):
+                        logger.info(f"重命名文件：{os.path.basename(mp3_filename)} -> {os.path.basename(new_filename)}")
+                        os.rename(mp3_filename, new_filename)
+                        final_filename = new_filename
+                
+                # 添加到下载历史
+                self.add_download_history(bvid, p, final_filename, info)
+                
+                # 清理临时文件
+                try:
+                    # 清理 JSON 文件
+                    info_json = f"{basename}.info.json"
+                    if os.path.exists(info_json):
+                        os.remove(info_json)
+                        logger.info("清理临时 JSON 文件")
+                        
+                    # 清理其他可能的临时文件
+                    for ext in ['.m4a', '.webm', '.part', '.ytdl']:
+                        temp_file = f"{basename}{ext}"
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                            logger.info(f"清理临时文件：{os.path.basename(temp_file)}")
+                except Exception as e:
+                    logger.warning(f"清理临时文件失败：{str(e)}")
+                
+                success_count += 1
+                yield {
+                    'status': 'success',
+                    'message': f'已下载：{os.path.basename(final_filename)}',
+                    'progress': (p / count) * 100,
+                    'title': title
+                }
             except Exception as e:
                 logger.error(f"下载失败：{str(e)}")
                 error_count += 1
@@ -520,7 +580,8 @@ class BiliDownloader:
                     'status': 'error',
                     'message': f'下载失败：{str(e)}',
                     'progress': (p / count) * 100,
-                    'retries_left': 5 - error_count
+                    'retries_left': 5 - error_count,
+                    'title': title
                 }
                 
                 # 如果重试次数未用完，等待后重试
@@ -552,3 +613,66 @@ class BiliDownloader:
         self.active_tasks[task_id]['duration'] = duration.total_seconds()
         self.save_task_state(task_id, self.active_tasks[task_id])
         self.cleanup_task_state(task_id)
+
+    def process_cover(self, cover_data):
+        try:
+            # 打开图片
+            img = Image.open(BytesIO(cover_data))
+            original_size = img.size
+            logger.info(f"原始图片尺寸：{original_size}")
+
+            # 以长边为基准创建正方形画布
+            max_side = max(img.width, img.height)
+            # 创建新的正方形画布
+            square_img = Image.new('RGB', (max_side, max_side), (255, 255, 255))
+            
+            # 计算粘贴位置
+            x_offset = (max_side - img.width) // 2
+            y_offset = (max_side - img.height) // 2
+            
+            # 将原图粘贴到正方形画布中心
+            square_img.paste(img, (x_offset, y_offset))
+            
+            # 使用智能填充处理边缘
+            if img.width < max_side:
+                # 左右边缘需要填充
+                left_edge = img.crop((0, 0, 1, img.height))
+                right_edge = img.crop((img.width-1, 0, img.width, img.height))
+                for x in range(0, x_offset):
+                    square_img.paste(left_edge, (x, y_offset))
+                for x in range(x_offset + img.width, max_side):
+                    square_img.paste(right_edge, (x, y_offset))
+            
+            if img.height < max_side:
+                # 上下边缘需要填充
+                top_edge = img.crop((0, 0, img.width, 1))
+                bottom_edge = img.crop((0, img.height-1, img.width, img.height))
+                for y in range(0, y_offset):
+                    square_img.paste(top_edge, (x_offset, y))
+                for y in range(y_offset + img.height, max_side):
+                    square_img.paste(bottom_edge, (x_offset, y))
+            
+            # 创建仅包含填充区域的蒙版
+            mask = Image.new('L', square_img.size, 0)
+            # 绘制原始图片区域（不模糊）
+            mask.paste(255, (x_offset, y_offset, x_offset + img.width, y_offset + img.height))
+            # 反转蒙版以获取填充区域
+            mask = ImageOps.invert(mask)
+            
+            # 仅对填充区域应用模糊
+            blurred = square_img.filter(ImageFilter.GaussianBlur(radius=10))
+            # 将模糊后的填充区域与原始图片合并
+            square_img.paste(blurred, mask=mask)
+            logger.info(f"正方形画布尺寸：{square_img.size} (已应用边缘模糊)")
+            
+            # 调整大小为 400x400
+            img = square_img.resize((400, 400), Image.Resampling.LANCZOS)
+            
+            # 转换为字节
+            output = BytesIO()
+            img.save(output, format='JPEG', quality=95)
+            logger.info(f"封面处理完成：{original_size} -> (400x400)")
+            return output.getvalue()
+        except Exception as e:
+            logger.error(f"处理封面时出错: {str(e)}")
+            return None

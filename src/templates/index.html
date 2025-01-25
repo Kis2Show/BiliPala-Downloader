@@ -3,314 +3,591 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bilibili音频下载器</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>B站音频下载器</title>
     <style>
+        :root {
+            --primary-color: #0066cc;
+            --primary-hover: #0077ed;
+            --text-primary: #1d1d1f;
+            --text-secondary: #86868b;
+            --text-light: #6e6e73;
+            --background: #fbfbfd;
+            --card-background: #ffffff;
+            --border-color: #d2d2d7;
+            --success-color: #00b300;
+            --warning-color: #ff9f0a;
+            --error-color: #ff3b30;
+            --info-color: #0066cc;
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 8px rgba(0,0,0,0.05);
+            --shadow-lg: 0 8px 16px rgba(0,0,0,0.06);
+        }
+
         body {
-            padding: 20px;
-            max-width: 800px;
+            font-family: "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            max-width: 980px;
             margin: 0 auto;
+            padding: 40px 20px;
+            background-color: var(--background);
+            color: var(--text-primary);
+            line-height: 1.47059;
+            font-weight: 400;
+            letter-spacing: -0.022em;
         }
-        .status-container {
-            display: none;
-            margin: 20px 0;
-            padding: 15px;
-            border-radius: 5px;
-            background-color: #f8f9fa;
+
+        .container {
+            background-color: var(--card-background);
+            padding: 48px;
+            border-radius: 18px;
+            box-shadow: var(--shadow-md);
         }
-        .progress {
-            margin-top: 10px;
-            position: relative;
-            height: 20px;
-        }
-        .progress-bar {
-            transition: width 0.3s ease;
-        }
-        .progress-text {
-            position: absolute;
-            width: 100%;
+
+        h1 {
+            font-size: 40px;
+            line-height: 1.1;
+            font-weight: 600;
+            letter-spacing: 0;
+            color: #424245;  /* 深灰色 */
+            margin: 0 0 48px 0;
             text-align: center;
-            line-height: 20px;
-            color: #000;
-            font-size: 0.875rem;
-            z-index: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
-        @media (max-width: 768px) {
+
+        h2 {
+            font-size: 24px;
+            line-height: 1.16667;
+            font-weight: 600;
+            letter-spacing: .009em;
+            color: var(--text-primary);
+            margin: 35px 0 17px 0;
+        }
+
+        .form-group {
+            margin-bottom: 28px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 12px;
+            font-size: 17px;
+            line-height: 1.23536;
+            font-weight: 400;
+            letter-spacing: -.022em;
+            color: var(--text-primary);
+        }
+
+        input[type="text"], input[type="url"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-sizing: border-box;
+            font-size: 17px;
+            line-height: 1.23536;
+            font-weight: 400;
+            letter-spacing: -.022em;
+            transition: all 0.3s;
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+
+        input[type="text"]:focus, input[type="url"]:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            background-color: var(--card-background);
+            box-shadow: 0 0 0 4px rgba(0,102,204,0.1);
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 12px 28px;
+            border: none;
+            border-radius: 980px;
+            cursor: pointer;
+            font-size: 17px;
+            line-height: 1.17648;
+            font-weight: 400;
+            letter-spacing: -.022em;
+            min-width: 140px;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            background-color: var(--text-light);
+            cursor: not-allowed;
+            transform: none;
+            opacity: 0.7;
+        }
+
+        .status {
+            margin-top: 28px;
+            padding: 16px 20px;
+            border-radius: 12px;
+            font-size: 15px;
+            line-height: 1.23536;
+            letter-spacing: -.022em;
+        }
+
+        .status.info {
+            background-color: rgba(0,102,204,0.1);
+            color: var(--info-color);
+        }
+
+        .status.success {
+            background-color: rgba(0,179,0,0.1);
+            color: var(--success-color);
+        }
+
+        .status.error {
+            background-color: rgba(255,59,48,0.1);
+            color: var(--error-color);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;  /* 调整进度条高度 */
+            background-color: rgba(0,0,0,0.05);
+            border-radius: 2px;  /* 调整圆角 */
+            overflow: hidden;
+            margin: 16px 0;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background-color: var(--primary-color);
+            transition: width 0.3s ease;
+            border-radius: 2px;  /* 调整圆角 */
+        }
+
+        .task-list {
+            margin-top: 40px;
+        }
+
+        .task-item {
+            background-color: var(--card-background);
+            padding: 24px;
+            margin-bottom: 16px;
+            border-radius: 18px;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s;
+        }
+
+        .task-item:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .task-header {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        .task-title {
+            font-size: 17px;
+            line-height: 1.23536;
+            font-weight: 400;
+            letter-spacing: -.022em;
+            color: var(--text-primary);
+        }
+
+        .task-bvid {
+            font-size: 13px;
+            line-height: 1.33337;
+            font-weight: 400;
+            letter-spacing: -.01em;
+            color: var(--text-secondary);
+        }
+
+        .task-status {
+            padding: 6px 14px;
+            border-radius: 980px;
+            font-size: 13px;
+            line-height: 1.23536;
+            font-weight: 400;
+            letter-spacing: -.022em;
+        }
+
+        .task-status.pending {
+            background-color: rgba(255,159,10,0.1);
+            color: var(--warning-color);
+        }
+
+        .task-status.running {
+            background-color: rgba(0,102,204,0.1);
+            color: var(--info-color);
+        }
+
+        .task-status.completed {
+            background-color: rgba(0,179,0,0.1);
+            color: var(--success-color);
+        }
+
+        .task-status.failed {
+            background-color: rgba(255,59,48,0.1);
+            color: var(--error-color);
+        }
+
+        .task-info {
+            font-size: 15px;
+            line-height: 1.23536;
+            letter-spacing: -.022em;
+            color: var(--text-secondary);
+            margin: 8px 0;
+        }
+
+        .error-message {
+            color: var(--error-color);
+            margin-top: 12px;
+            font-size: 13px;
+            line-height: 1.33337;
+            letter-spacing: -.01em;
+        }
+
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin: 0;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            appearance: none;
+            -webkit-appearance: none;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+            background-color: rgba(0,0,0,0.02);
+        }
+
+        input[type="checkbox"]:checked {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        input[type="checkbox"]:checked::after {
+            content: '';
+            position: absolute;
+            left: 6px;
+            top: 2px;
+            width: 6px;
+            height: 12px;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
+        input[type="checkbox"]:focus {
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(0,102,204,0.1);
+        }
+
+        .task-list h2 {
+            font-size: 17px;
+            margin-bottom: 20px;
+            color: #424245;  /* 深灰色 */
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .task-list h2::before {
+            content: '';
+            width: 4px;
+            height: 17px;
+            background-color: var(--primary-color);
+            border-radius: 2px;
+        }
+
+        .last-task-container {
+            background-color: var(--card-background);
+            border: 1px solid var(--border-color);
+            border-radius: 18px;
+            padding: 24px;
+            margin-bottom: 32px;
+            transition: all 0.3s;
+        }
+
+        .last-task-container:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .last-task-container h2 {
+            font-size: 17px;
+            margin-bottom: 20px;
+            color: #424245;
+        }
+
+        .last-task-container button {
+            margin-top: 20px;
+            width: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .last-task-container button::before {
+            content: '↺';
+            font-size: 18px;
+        }
+
+        .title-container {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .title-prefix {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            font-weight: 500;  /* 改回原来的粗细 */
+        }
+
+        @media (max-width: 734px) {
             body {
-                padding: 10px;
+                padding: 20px 16px;
+            }
+
+            .container {
+                padding: 32px 24px;
+            }
+
+            h1 {
+                font-size: 32px;
+                margin-bottom: 32px;
+            }
+
+            button {
+                width: 100%;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 class="mb-4">Bilibili音频下载器</h1>
+        <div class="title-container">
+            <h1><span class="title-prefix">BiBilili</span>音频下载器</h1>
+        </div>
+        <div id="lastTask" class="last-task-container" style="display: none;">
+            <h2>上次任务</h2>
+            <div id="lastTaskInfo"></div>
+            <button onclick="restoreLastTask()">恢复上次任务</button>
+        </div>
         
-        <div class="status-container">
-            <div id="status-text"></div>
-            <div class="progress">
-                <div class="progress-bar" role="progressbar" style="width: 0%"></div>
-                <div class="progress-text">0%</div>
+        <form id="downloadForm" onsubmit="startDownload(event)">
+            <div class="form-group">
+                <label for="url">视频链接</label>
+                <input type="url" id="url" required placeholder="请输入B站视频链接">
             </div>
-        </div>
-
-        <div class="mb-3">
-            <label for="biliUrl" class="form-label">哔哩哔哩链接</label>
-            <input type="text" class="form-control" id="biliUrl" placeholder="请输入视频链接">
-        </div>
-
-        <div class="mb-3">
-            <label for="outputDir" class="form-label">输出目录</label>
-            <input type="text" class="form-control" id="outputDir" placeholder="请输入输出目录名">
-        </div>
-
-        <div class="mb-3 form-check">
-            <input type="checkbox" class="form-check-input" id="renameFiles">
-            <label class="form-check-label" for="renameFiles">重命名文件</label>
-        </div>
-
-        <div class="mb-3">
-            <button id="checkList" class="btn btn-secondary">检查列表</button>
-            <button id="startDownload" class="btn btn-primary">开始下载</button>
-        </div>
-
-        <div class="task-list mb-3" id="taskListContainer" style="display: none;">
-            <h6 class="mb-3 text-muted">当前任务</h6>
-            <div id="taskList" class="list-group">
-                <div class="list-group-item text-muted" id="noTasksMessage">无下载任务</div>
+            <div class="form-group">
+                <label for="outputDir">保存位置</label>
+                <input type="text" id="outputDir" required placeholder="请输入保存目录">
             </div>
+            <div class="form-group checkbox-wrapper">
+                <input type="checkbox" id="rename">
+                <label for="rename" style="margin: 0;">重命名文件（去除特殊字符）</label>
+            </div>
+            <button type="submit" id="submitBtn">开始下载</button>
+        </form>
+
+        <div id="status" class="status" style="display: none;"></div>
+
+        <div class="task-list" id="taskList">
+            <h2>当前任务</h2>
+            <!-- 任务列表将在这里动态添加 -->
         </div>
     </div>
-<script>
-    // 保存用户输入到localStorage
-    function saveInputs() {
-        const inputs = {
-            url: document.getElementById('biliUrl').value,
-            outputDir: document.getElementById('outputDir').value,
-            rename: document.getElementById('renameFiles').checked
-        };
-        localStorage.setItem('lastInputs', JSON.stringify(inputs));
-    }
 
-    // 恢复用户输入
-    function restoreInputs() {
-        const inputs = JSON.parse(localStorage.getItem('lastInputs') || '{}');
-        if (inputs.url) {
-            document.getElementById('biliUrl').value = inputs.url;
-        }
-        if (inputs.outputDir) {
-            document.getElementById('outputDir').value = inputs.outputDir;
-        }
-        if (inputs.rename !== undefined) {
-            document.getElementById('renameFiles').checked = inputs.rename;
-        }
-    }
-
-    // 获取最新任务状态
-    async function checkLatestTask() {
-        try {
-            const response = await fetch('/latest_task');
-            const data = await response.json();
-            
-            if (data.error) {
-                console.log('没有找到进行中的任务');
-                return;
-            }
-
-            // 恢复输入
-            document.getElementById('biliUrl').value = `https://www.bilibili.com/video/${data.bvid}`;
-            document.getElementById('outputDir').value = data.output_dir;
-            
-            // 更新状态
-            showStatus();
-            updateStatus(`任务状态: ${data.status}`, data.progress);
-            
-            // 如果是进行中的任务，开始轮询状态
-            if (data.status === 'running') {
-                setInterval(async () => {
-                    const taskId = await getTaskId();
-                    const statusResponse = await fetch(`/task_status?task_id=${taskId}`);
-                    const statusData = await statusResponse.json();
-                    if (!statusData.error) {
-                        updateStatus(`任务状态: ${statusData.status}`, statusData.progress);
-                    }
-                }, 5000);
-            }
-        } catch (error) {
-            console.error('获取最新任务失败:', error);
-        }
-    }
-
-    function showStatus() {
-        document.querySelector('.status-container').style.display = 'block';
-    }
-
-    function updateStatus(text, progress = null) {
-        document.getElementById('status-text').textContent = text;
-        if (progress !== null) {
-            const progressBar = document.querySelector('.progress-bar');
-            const progressText = document.querySelector('.progress-text');
-            progressBar.style.width = `${progress}%`;
-            progressText.textContent = `${Math.round(progress)}%`;
-            if (progress > 50) {
-                progressText.style.color = '#fff';
-            } else {
-                progressText.style.color = '#000';
-            }
-        }
-    }
-
-        function extractBvid(url) {
-            const match = url.match(/BV[a-zA-Z0-9]+/);
-            return match ? match[0] : null;
-        }
-
-        // 初始化页面
-        document.addEventListener('DOMContentLoaded', () => {
-            restoreInputs();
-            loadTaskList();
+    <script>
+        let currentTaskId = null;
+        
+        // 页面加载时检查最新任务
+        window.addEventListener('load', async () => {
+            await checkLatestTask();
+            await updateTaskList();
+            // 定期更新任务列表
+            setInterval(updateTaskList, 5000);
         });
 
-        // 加载任务列表
-        async function loadTaskList() {
+        async function checkLatestTask() {
             try {
-                const response = await fetch('/download_history');
-                const data = await response.json();
-                const taskList = document.getElementById('taskList');
-                const noTasksMessage = document.getElementById('noTasksMessage');
-                
-                const taskListContainer = document.getElementById('taskListContainer');
-                const title = taskListContainer.querySelector('h6');
-                taskList.innerHTML = '';
-                
-                if (data.tasks.length) {
-                    title.classList.remove('text-muted');
-                    noTasksMessage.style.display = 'none';
-                } else {
-                    title.classList.add('text-muted');
-                    noTasksMessage.style.display = 'block';
+                const response = await fetch('/latest_task');
+                if (response.ok) {
+                    const task = await response.json();
+                    if (task && ['pending', 'running'].includes(task.status)) {
+                        showLastTask(task);
+                    }
                 }
-
-                data.tasks.forEach(task => {
-                    const taskItem = document.createElement('div');
-                    taskItem.className = 'list-group-item';
-                    taskItem.innerHTML = `
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <div class="fw-bold">${task.bvid}</div>
-                                <div class="text-muted small">状态: ${task.status}</div>
-                                <div class="text-muted small">进度: ${task.progress || 0}%</div>
-                            </div>
-                            <div class="text-end">
-                                <div class="text-muted small">${new Date(task.last_update).toLocaleString()}</div>
-                            </div>
-                        </div>
-                    `;
-                    taskList.appendChild(taskItem);
-                });
             } catch (error) {
-                console.error('加载任务列表失败:', error);
+                console.error('检查最新任务失败:', error);
             }
         }
 
-        // 为输入框添加保存事件
-        document.getElementById('biliUrl').addEventListener('input', saveInputs);
-        document.getElementById('outputDir').addEventListener('input', saveInputs);
-        document.getElementById('renameFiles').addEventListener('change', saveInputs);
+        function showLastTask(task) {
+            const lastTaskDiv = document.getElementById('lastTask');
+            const lastTaskInfo = document.getElementById('lastTaskInfo');
+            lastTaskInfo.innerHTML = `
+                <div class="task-title">${task.title || '获取中...'}</div>
+                <div class="task-bvid">BV号：${task.bvid}</div>
+                <div class="task-info">输出目录：${task.output_dir}</div>
+                <div class="task-info">状态：${getStatusText(task.status)}</div>
+                <div class="task-info">进度：${task.progress.toFixed(2)}%</div>
+            `;
+            lastTaskDiv.style.display = 'block';
+        }
 
-        // 事件监听器
-        document.getElementById('checkList').addEventListener('click', async () => {
-            const url = document.getElementById('biliUrl').value;
-            const bvid = extractBvid(url);
-            if (!bvid) {
-                alert('请输入有效的哔哩哔哩链接');
+        async function restoreLastTask() {
+            try {
+                const response = await fetch('/latest_task');
+                if (response.ok) {
+                    const task = await response.json();
+                    document.getElementById('url').value = `https://www.bilibili.com/video/${task.bvid}`;
+                    document.getElementById('outputDir').value = task.output_dir;
+                    document.getElementById('rename').checked = task.rename;
+                    document.getElementById('lastTask').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('恢复任务失败:', error);
+            }
+        }
+
+        async function startDownload(event) {
+            event.preventDefault();
+            const url = document.getElementById('url').value;
+            const outputDir = document.getElementById('outputDir').value;
+            const rename = document.getElementById('rename').checked;
+            const submitBtn = document.getElementById('submitBtn');
+            const status = document.getElementById('status');
+            
+            // 从URL中提取BV号
+            const bvMatch = url.match(/BV[a-zA-Z0-9]+/);
+            if (!bvMatch) {
+                showError('无效的B站视频链接');
                 return;
             }
-
-            showStatus();
-            updateStatus('正在检查播放列表...');
+            const bvid = bvMatch[0];
 
             try {
-                const response = await fetch('/check_playlist', {
+                submitBtn.disabled = true;
+                status.style.display = 'block';
+                status.className = 'status info';
+                status.textContent = '正在检查播放列表...';
+
+                // 检查播放列表
+                const checkResponse = await fetch('/check_playlist', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({bvid})
                 });
-                const data = await response.json();
+                const checkResult = await checkResponse.json();
                 
-                if (data.success) {
-                    updateStatus(`播放列表共有 ${data.count} 个视频`);
-                } else {
-                    updateStatus(`检查失败: ${data.error}`);
+                if (!checkResult.success) {
+                    throw new Error(checkResult.error);
                 }
+
+                // 开始下载
+                const downloadResponse = await fetch('/download', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({bvid, output_dir: outputDir, rename})
+                });
+                const downloadResult = await downloadResponse.json();
+                
+                if (!downloadResult.success) {
+                    throw new Error(downloadResult.error);
+                }
+
+                currentTaskId = downloadResult.task_id;
+                showSuccess('下载任务已创建');
+                updateTaskList();
             } catch (error) {
-                updateStatus(`发生错误: ${error.message}`);
+                showError(error.message);
+            } finally {
+                submitBtn.disabled = false;
             }
-        });
+        }
 
-        document.getElementById('startDownload').addEventListener('click', () => {
-            const url = document.getElementById('biliUrl').value;
-            const outputDir = document.getElementById('outputDir').value;
-            const rename = document.getElementById('renameFiles').checked;
-            const bvid = extractBvid(url);
+        function showError(message) {
+            const status = document.getElementById('status');
+            status.style.display = 'block';
+            status.className = 'status error';
+            status.textContent = message;
+        }
 
-            if (!bvid || !outputDir) {
-                alert('请填写所有必要信息');
-                return;
-            }
+        function showSuccess(message) {
+            const status = document.getElementById('status');
+            status.style.display = 'block';
+            status.className = 'status success';
+            status.textContent = message;
+        }
 
-            showStatus();
-            updateStatus('开始下载...');
-
-            const eventSource = new EventSource(`/download?bvid=${bvid}&output_dir=${encodeURIComponent(outputDir)}&rename=${rename}`);
-            
-            eventSource.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                if (data.error) {
-                    updateStatus(`错误: ${data.error}`);
-                    eventSource.close();
-                } else {
-                    updateStatus(data.message, data.progress);
-                    if (data.progress >= 100) {
-                        eventSource.close();
-                    }
-                }
+        function getStatusText(status) {
+            const statusMap = {
+                'pending': '等待中',
+                'running': '下载中',
+                'completed': '已完成',
+                'failed': '下载失败'
             };
+            return statusMap[status] || status;
+        }
 
-            eventSource.onerror = () => {
-                updateStatus('下载过程中断');
-                eventSource.close();
-            };
-        });
-
-        document.getElementById('checkStatus').addEventListener('click', async () => {
-            const url = document.getElementById('biliUrl').value;
-            const outputDir = document.getElementById('outputDir').value;
-            const bvid = extractBvid(url);
-            
-            if (!bvid || !outputDir) {
-                alert('请填写所有必要信息');
-                return;
-            }
-
-            const taskId = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(`${bvid}_${outputDir}`))
-                .then(hash => Array.from(new Uint8Array(hash))
-                    .map(b => b.toString(16).padStart(2, '0'))
-                    .join('').substring(0, 32));
-
+        async function updateTaskList() {
             try {
-                const response = await fetch(`/task_status?task_id=${taskId}`);
+                const response = await fetch('/active_tasks');
                 const data = await response.json();
+                const taskList = document.getElementById('taskList');
                 
-                if (data.error) {
-                    updateStatus(`任务状态查询失败: ${data.error}`);
-                } else {
-                    updateStatus(`任务状态: ${data.status}`);
+                // 清空现有任务列表
+                while (taskList.children.length > 1) {
+                    taskList.removeChild(taskList.lastChild);
                 }
+
+                // 按创建时间排序并去重（基于BV号）
+                const uniqueTasks = data.tasks
+                    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                    .filter((task, index, self) => 
+                        index === self.findIndex(t => t.bvid === task.bvid)
+                    )
+                    .slice(0, 3);  // 只取最近的3个不重复任务
+
+                // 添加任务到列表
+                uniqueTasks.forEach(task => {
+                    const taskElement = document.createElement('div');
+                    taskElement.className = 'task-item';
+                    taskElement.innerHTML = `
+                        <div class="task-header">
+                            <div class="task-title">${task.title || '获取中...'}</div>
+                            <div class="task-bvid">BV号：${task.bvid}</div>
+                        </div>
+                        <div class="task-info">输出目录：${task.output_dir}</div>
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill" style="width: ${task.progress}%"></div>
+                        </div>
+                        <div class="task-info">进度：${task.progress.toFixed(2)}%</div>
+                        ${task.error ? `<div class="error-message">错误：${task.error}</div>` : ''}
+                    `;
+                    taskList.appendChild(taskElement);
+                });
             } catch (error) {
-                updateStatus(`查询任务状态出错: ${error.message}`);
+                console.error('更新任务列表失败:', error);
             }
-        });
+        }
     </script>
 </body>
 </html> 

@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, Response
-from utils.downloader import BiliDownloader
+from utils.task_manager import TaskManager
 import os
 import json
 import logging
@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger('BiliDownloader-Web')
 
 app = Flask(__name__)
-downloader = BiliDownloader()
+task_manager = TaskManager()
 
 @app.route('/')
 def index():
@@ -27,18 +27,19 @@ def check_playlist():
     bvid = data.get('bvid')
     logger.info(f"检查播放列表：{bvid}")
     try:
-        count = downloader.check_playlist(bvid)
+        count = task_manager.downloader.check_playlist(bvid)
         logger.info(f"播放列表检查完成：{count} 个视频")
         return jsonify({'success': True, 'count': count})
     except Exception as e:
         logger.error(f"播放列表检查失败：{str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/download', methods=['GET'])
+@app.route('/download', methods=['POST'])
 def download():
-    bvid = request.args.get('bvid')
-    output_dir = request.args.get('output_dir')
-    rename = request.args.get('rename', 'false').lower() == 'true'
+    data = request.get_json()
+    bvid = data.get('bvid')
+    output_dir = data.get('output_dir')
+    rename = data.get('rename', False)
     
     if not bvid or not output_dir:
         logger.error("下载请求缺少必要参数")
@@ -46,51 +47,17 @@ def download():
     
     logger.info(f"开始下载任务：bvid={bvid}, output_dir={output_dir}, rename={rename}")
     
-    # 创建新任务记录
-    task_id = f"{bvid}_{output_dir}"
-    new_task = {
-        'task_id': task_id,
-        'bvid': bvid,
-        'output_dir': output_dir,
-        'rename': rename,
-        'status': 'pending',
-        'progress': 0,
-        'last_update': datetime.now().isoformat()
-    }
-    
-    # 保存任务记录
-    history = load_download_history()
-    history['tasks'].append(new_task)
-    save_download_history(history)
-    
-    def generate():
-        try:
-            for progress in downloader.download(bvid, output_dir, rename):
-                # 更新任务状态
-                history = load_download_history()
-                for task in history['tasks']:
-                    if task['task_id'] == task_id:
-                        task['status'] = progress.get('status', 'running')
-                        task['progress'] = progress.get('progress', 0)
-                        task['last_update'] = datetime.now().isoformat()
-                        break
-                save_download_history(history)
-                
-                yield f"data: {json.dumps(progress)}\n\n"
-        except Exception as e:
-            # 更新任务状态为失败
-            history = load_download_history()
-            for task in history['tasks']:
-                if task['task_id'] == task_id:
-                    task['status'] = 'failed'
-                    task['last_update'] = datetime.now().isoformat()
-                    break
-            save_download_history(history)
-            
-            logger.error(f"下载过程出错：{str(e)}")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-    
-    return Response(generate(), mimetype='text/event-stream')
+    try:
+        # 创建新任务
+        task_id = task_manager.create_task(bvid, output_dir, rename)
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': '任务已创建并开始下载'
+        })
+    except Exception as e:
+        logger.error(f"创建下载任务失败：{str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/task_status', methods=['GET'])
 def task_status():
@@ -98,78 +65,34 @@ def task_status():
     if not task_id:
         return jsonify({'error': '缺少task_id参数'}), 400
     
-    status = downloader.load_task_state(task_id)
+    status = task_manager.get_task_status(task_id)
     if not status:
         return jsonify({'error': '任务不存在'}), 404
     
     return jsonify(status)
-def load_download_history():
-    try:
-        with open('download_tasks/download_history.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {'tasks': []}
 
-def save_download_history(data):
-    with open('download_tasks/download_history.json', 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-@app.route('/download_history', methods=['GET'])
-def get_download_history():
-    history = load_download_history()
-    # 只返回未完成的任务
-    active_tasks = [task for task in history['tasks'] if task['status'] != 'completed']
-    return jsonify({'tasks': active_tasks})
-
-@app.route('/update_task_status', methods=['POST'])
-def update_task_status():
-    data = request.get_json()
-    task_id = data.get('task_id')
-    status = data.get('status')
-    progress = data.get('progress')
-    
-    if not task_id or not status:
-        return jsonify({'error': '缺少必要参数'}), 400
-    
-    history = load_download_history()
-    for task in history['tasks']:
-        if task['task_id'] == task_id:
-            task['status'] = status
-            if progress is not None:
-                task['progress'] = progress
-            task['last_update'] = datetime.now().isoformat()
-            break
-    else:
-        return jsonify({'error': '任务不存在'}), 404
-    
-    save_download_history(history)
-    return jsonify({'success': True})
+@app.route('/active_tasks', methods=['GET'])
+def get_active_tasks():
+    """获取所有活动任务"""
+    tasks = task_manager.get_all_tasks()
+    return jsonify({'tasks': list(tasks.values())})
 
 @app.route('/latest_task', methods=['GET'])
 def latest_task():
-    try:
-        # 获取最新的任务文件
-        task_files = sorted(
-            [f for f in os.listdir('download_tasks') if f.endswith('.json')],
-            key=lambda f: os.path.getmtime(os.path.join('download_tasks', f)),
-            reverse=True
-        )
-        if not task_files:
-            return jsonify({'error': '没有找到任务'}), 404
-        
-        latest_file = task_files[0]
-        with open(os.path.join('download_tasks', latest_file), 'r', encoding='utf-8') as f:
-            task_data = json.load(f)
-        
-        return jsonify({
-            'bvid': task_data.get('bvid'),
-            'output_dir': task_data.get('output_dir'),
-            'status': task_data.get('status'),
-            'progress': task_data.get('progress', 0)
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    """获取最新的任务"""
+    task = task_manager.get_latest_task()
+    if not task:
+        return jsonify({'error': '没有找到任务'}), 404
+    return jsonify(task)
+
+@app.route('/cleanup_tasks', methods=['POST'])
+def cleanup_tasks():
+    """清理已完成的任务"""
+    task_manager.cleanup_completed_tasks()
+    return jsonify({'success': True, 'message': '已清理完成的任务'})
 
 if __name__ == '__main__':
     logger.info("启动 Web 服务器")
+    # 确保下载任务目录存在
+    os.makedirs('download_tasks', exist_ok=True)
     app.run(host='0.0.0.0', port=5000, debug=True)

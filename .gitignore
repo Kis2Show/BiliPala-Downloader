@@ -23,3 +23,5 @@ __pycache__/
 # Download history and tasks
 download_history/
 download_tasks/
+
+venv/

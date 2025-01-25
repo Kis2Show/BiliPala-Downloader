@@ -19,3 +19,7 @@ Audiobooks/
 tests/
 *.pyc
 __pycache__/
+
+# Download history and tasks
+download_history/
+download_tasks/

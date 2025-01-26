@@ -2,9 +2,9 @@ name: Docker Build for arm64 and amd64
 
 on:
   push:
-    branches: [ "main", "dev" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "main", "dev" ]
+    branches: [ "main" ]
 
 jobs:
   build:
@@ -33,5 +33,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/bilibili-audio-downloader:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/bilibili-audio-downloader:${{ github.sha }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/bilipala-downloader:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/bilipala-downloader:${{ github.sha }}

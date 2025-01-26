@@ -6,7 +6,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./audiobooks:/app/audiobooks
+      - ./audiobooks:/app/Audiobooks
       - ./tasks:/app/download_tasks
       - ./history:/app/download_history
       - ./config:/app/config

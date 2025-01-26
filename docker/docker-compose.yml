@@ -1,12 +1,15 @@
 version: '3.8'
 
 services:
-  bili-audio-downloader:
-    build: .
+  bilipala-downloader:
+    image: kis2show/bilipala-downloader:latest
     ports:
       - "5000:5000"
     volumes:
       - ./audiobooks:/app/audiobooks
+      - ./tasks:/app/download_tasks
+      - ./history:/app/download_history
+      - ./config:/app/config
     environment:
       - FLASK_ENV=development
     restart: unless-stopped

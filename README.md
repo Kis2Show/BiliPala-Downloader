@@ -1,6 +1,6 @@
-# B站音频下载器
+# BiliPala有声下载器
 
-一个简单的B站视频音频提取工具，支持单个视频和多P视频的音频提取。
+背靠 Bilibili 视频资源，只需要一个播放链接，即可自动化提取该播放列表下所有有声书资源至本地，自动截取封面，直接可用。
 
 ## 功能特点
 
@@ -11,16 +11,19 @@
 - 美观的Web界面
 - 实时下载进度显示
 - 支持并发下载和处理
+- 音频命名支持关键字屏蔽
+- 支持 Docker 部署
 
 ## 运行截图
 
-![运行截图](snapshots.jpeg)
+![运行截图](screencapture.jpeg)
 
 ## 环境要求
 
 - Python 3.8+
 - FFmpeg
 - 操作系统：Windows/Linux/MacOS
+- 或者 Docker 环境
 
 ## 安装步骤
 
@@ -65,12 +68,21 @@ python src/app.py
 
 然后在浏览器中访问：`http://localhost:5000`
 
+## Docker 部署
+
+```bash
+git clone 本项目至本地电脑
+进入 docker 文件夹下
+然后 docker compose up -d 即可
+```
+
 ## 使用说明
 
 1. 在输入框中粘贴B站视频链接（支持普通视频和多P视频）
 2. 点击下载按钮开始处理
 3. 等待下载和处理完成
 4. 在下载目录中查看处理好的音频文件
+5. 配置 config/keywords_filter.json 可过滤不需要的命名规则
 
 ## 注意事项
 

@@ -467,7 +467,7 @@ class BiliDownloader:
                     yield {
                         'status': 'skip',
                         'message': f'已跳过重复文件：{os.path.basename(existing_file)}',
-                        'progress': (p / count) * 100,
+                        'progress': (p / count) * 100,  # 基于总视频数计算进度
                         'title': title
                     }
                     continue
@@ -491,12 +491,22 @@ class BiliDownloader:
                         # 检查进度队列
                         while progress_queue:
                             progress_info = progress_queue.pop(0)
+                            # 修改进度计算逻辑，将单个文件的进度转换为总进度
+                            if progress_info['status'] == 'progress':
+                                file_progress = progress_info['progress']
+                                total_progress = ((p - 1) * 100 + file_progress) / count
+                                progress_info['progress'] = total_progress
                             yield progress_info
                         time.sleep(0.1)  # 避免过于频繁的检查
                     
                     # 确保获取最后的进度信息
                     while progress_queue:
                         progress_info = progress_queue.pop(0)
+                        # 修改最后的进度信息
+                        if progress_info['status'] == 'progress':
+                            file_progress = progress_info['progress']
+                            total_progress = ((p - 1) * 100 + file_progress) / count
+                            progress_info['progress'] = total_progress
                         yield progress_info
                     
                     download_thread.join()

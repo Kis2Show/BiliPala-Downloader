@@ -42,6 +42,99 @@ class TaskManager:
         except Exception as e:
             logger.error(f"保存任务状态失败: {str(e)}")
 
+    def create_collection_task(self, mid: str, season_id: str, output_dir: str, rename: bool = False) -> str:
+        """创建新的合集下载任务"""
+        task_id = f"collection_{mid}_{season_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
+        # 获取合集信息
+        try:
+            collection_data = self.downloader.get_collection_info(mid, season_id)
+            titles = [item['title'] for item in collection_data]
+        except Exception as e:
+            logger.error(f"获取合集信息失败: {str(e)}")
+            titles = []
+
+        task = {
+            'task_id': task_id,
+            'mid': mid,
+            'season_id': season_id,
+            'titles': titles,
+            'output_dir': output_dir,
+            'rename': rename,
+            'status': 'pending',
+            'progress': 0,
+            'created_at': datetime.now().isoformat(),
+            'last_update': datetime.now().isoformat()
+        }
+        
+        with self.tasks_lock:
+            self.tasks[task_id] = task
+            self.save_tasks()
+        
+        # 在新线程中启动下载
+        thread = threading.Thread(target=self._download_collection_task, args=(task_id,))
+        thread.daemon = True  # 设置为守护线程，这样主程序退出时线程会自动结束
+        thread.start()
+        
+        return task_id
+
+    def _download_collection_task(self, task_id: str):
+        """执行合集下载任务"""
+        try:
+            with self.tasks_lock:
+                task = self.tasks[task_id]
+                task['status'] = 'running'
+                self.save_tasks()
+
+            # 开始下载合集中的每个视频
+            collection_data = self.downloader.get_collection_info(task['mid'], task['season_id'])
+            total_videos = len(collection_data)
+            for index, video in enumerate(collection_data):
+                bvid = video['bvid']
+                title = video['title']
+                
+                # 更新任务进度
+                progress = (index / total_videos) * 100
+                with self.tasks_lock:
+                    task = self.tasks[task_id]
+                    task['progress'] = progress
+                    task['last_update'] = datetime.now().isoformat()
+                    self.save_tasks()
+                
+                # 下载单个视频
+                for download_progress in self.downloader.download(bvid, task['output_dir'], task['rename']):
+                    if isinstance(download_progress, dict):
+                        with self.tasks_lock:
+                            task = self.tasks[task_id]
+                            if download_progress.get('status') == 'success':
+                                task['titles'].remove(title)
+                            elif download_progress.get('status') == 'error':
+                                task['status'] = 'failed'
+                                task['error'] = download_progress.get('message', '下载失败')
+                            else:
+                                task['progress'] = progress + (download_progress.get('progress', 0) / total_videos)
+                            
+                            task['last_update'] = datetime.now().isoformat()
+                            self.save_tasks()
+            
+            # 如果没有出错且没有被标记为完成，则标记为完成
+            with self.tasks_lock:
+                task = self.tasks[task_id]
+                if task['status'] not in ['completed', 'failed']:
+                    task['status'] = 'completed'
+                    task['progress'] = 100
+                    task['last_update'] = datetime.now().isoformat()
+                    self.save_tasks()
+
+        except Exception as e:  # 确保每个 try 都有对应的 except
+            logger.error(f"合集下载任务执行失败: {str(e)}")
+            with self.tasks_lock:
+                task = self.tasks[task_id]
+                task['status'] = 'failed'
+                task['error'] = str(e)
+                task['last_update'] = datetime.now().isoformat()
+                self.save_tasks()
+
     def create_task(self, bvid: str, output_dir: str, rename: bool = False) -> str:
         """创建新的下载任务"""
         task_id = f"{bvid}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -115,7 +208,7 @@ class TaskManager:
                     task['last_update'] = datetime.now().isoformat()
                     self.save_tasks()
 
-        except Exception as e:
+        except Exception as e:  # 确保每个 try 都有对应的 except
             logger.error(f"下载任务执行失败: {str(e)}")
             with self.tasks_lock:
                 task = self.tasks[task_id]
@@ -152,4 +245,4 @@ class TaskManager:
             ]
             for task_id in completed_tasks:
                 del self.tasks[task_id]
-            self.save_tasks() 
+            self.save_tasks()

@@ -13,7 +13,13 @@ RUN apk add --no-cache --virtual .build-deps \
   musl-dev \
   gcc \
   make \
-  pkgconf
+  pkgconf \
+  git \
+  autoconf \
+  automake \
+  libtool \
+  yasm \
+  nasm
 
 # 克隆并编译 FFmpeg 核心组件
 RUN git clone --depth 1 --branch n4.4 https://github.com/FFmpeg/FFmpeg.git /tmp/ffmpeg && \
@@ -68,6 +74,7 @@ RUN case $TARGETPLATFORM in \
 # 从构建阶段复制Python包
 COPY --from=builder /usr/local/lib/python3.9/site-packages /usr/local/lib/python3.9/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /opt/ffmpeg /opt/ffmpeg
 
 # 添加非root用户
 RUN addgroup -S appgroup && \
@@ -82,7 +89,7 @@ COPY ../requirements.txt .
 COPY ../.env.example .env
 
 # 设置环境变量
-ENV PATH="/usr/local/bin:/opt/venv/bin:$PATH"
+ENV PATH="/usr/local/bin:/opt/ffmpeg/bin:/opt/venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1 \
   PYTHONDONTWRITEBYTECODE=1 \
   PYTHONPATH=/app

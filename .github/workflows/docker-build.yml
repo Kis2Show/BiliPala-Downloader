@@ -2,9 +2,9 @@ name: Docker Build for arm64 and amd64
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main", "dev"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build:

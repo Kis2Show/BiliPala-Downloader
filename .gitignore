@@ -13,7 +13,7 @@ ffmpeg*.zip
 *.tmp
 
 # Audio books
-Audiobooks/
+audiobooks/
 
 # Test files
 tests/

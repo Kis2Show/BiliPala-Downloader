@@ -440,7 +440,7 @@ class BiliDownloader:
     def download(self, bvid: str, output_dir: str, rename: bool = False) -> Generator[Dict[str, Any], None, None]:
         """下载音频文件"""
         start_time = datetime.now()
-        base_path = os.path.join(os.getenv('DOWNLOAD_DIR', 'Audiobooks'), output_dir)
+        base_path = os.path.join(os.getenv('DOWNLOAD_DIR', 'audiobooks'), output_dir)
         os.makedirs(base_path, exist_ok=True)
         logger.info(f"创建输出目录：{base_path}")
 

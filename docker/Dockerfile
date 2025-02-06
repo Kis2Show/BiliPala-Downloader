@@ -46,16 +46,30 @@ ENV CXXFLAGS="${CFLAGS}"
 ENV PKG_CONFIG_PATH="/usr/local/lib/pkgconfig"
 
 # ===== FFmpeg编译段 =====
-RUN git clone --depth 1 --branch n5.1.3 https://github.com/FFmpeg/FFmpeg.git /tmp/ffmpeg && \
+RUN apk add --no-cache \
+  nasm \
+  gcc-aarch64-linux-gnu \
+  musl-dev-aarch64 \
+  binutils-aarch64 \
+  cross-musl-aarch64
+
+RUN git clone --depth 1 --branch n6.1 https://github.com/FFmpeg/FFmpeg.git /tmp/ffmpeg && \
   cd /tmp/ffmpeg && \
-
-  # 修改x86汇编代码
-  ([ "$TARGETPLATFORM" = "linux/amd64" ] && \
-  sed -i -e 's/shrl $[^,]*$,%$e\|r$cx/shrl \1,%ecx/g' \
-  -e 's/shrl $[^,]*$,%$e\|r$ax/shrl \1,%eax/g' \
-  libavcodec/x86/mathops.h || true) && \
-
-  # 配置编译参数
+  # AMD64专用补丁
+  if [ "$TARGETARCH" = "amd64" ]; then \
+  sed -i \
+  -e 's/shrl $[^,]*$,%e\(cx\)/shrl \1,%ecx/g' \
+  -e 's/shrl $[^,]*$,%e\(ax\)/shrl \1,%eax/g' \
+  libavcodec/x86/mathops.h; \
+  fi && \
+  # 动态架构配置
+  ARCH_FLAGS="--arch=$(case "$TARGETARCH" in \
+  "amd64") echo "x86_64" ;; \
+  "arm64") echo "aarch64" ;; \
+  *) echo "native" ;; \
+  esac)" && \
+  NEON_FLAG=$([ "$TARGETARCH" = "arm64" ] && echo "--enable-neon") && \
+  # 运行配置
   ./configure \
   --prefix=/opt/ffmpeg \
   --enable-gpl \
@@ -63,11 +77,12 @@ RUN git clone --depth 1 --branch n5.1.3 https://github.com/FFmpeg/FFmpeg.git /tm
   --enable-libmp3lame \
   --enable-openssl \
   --enable-nonfree \
-  $(if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
-  echo "--disable-asm --arch=x86_64"; \
-  else \
-  echo "--enable-neon --arch=aarch64"; \
-  fi) \
+  $ARCH_FLAGS \
+  $NEON_FLAG \
+  --cross-prefix=aarch64-linux-gnu- \
+  --enable-cross-compile \
+  --target-os=linux \
+  --disable-asm \
   --disable-doc \
   --disable-avdevice \
   --disable-swresample \
@@ -77,8 +92,6 @@ RUN git clone --depth 1 --branch n5.1.3 https://github.com/FFmpeg/FFmpeg.git /tm
   --disable-debug \
   --extra-cflags="-I/usr/include -fPIC" \
   --extra-ldflags="-L/usr/lib -Wl,-rpath,/opt/ffmpeg/lib" && \
-
-  # 编译安装
   make -j$(nproc) && \
   make install && \
   rm -rf /tmp/ffmpeg

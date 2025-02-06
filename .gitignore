@@ -16,6 +16,7 @@ ffmpeg*.zip
 audiobooks/
 
 # Test files
+.vscode/
 tests/
 *.pyc
 __pycache__/

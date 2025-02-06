@@ -112,10 +112,11 @@ RUN apk add --no-cache \
   libass \
   zlib \
   ffmpeg \
-  python3 && \
-  # 配置动态库路径
-  echo "/opt/ffmpeg/lib" >> /etc/ld.so.conf.d/ffmpeg.conf && \
-  ldconfig
+  python3 \
+  # 必须的目录创建操作
+  && mkdir -p /etc/ld.so.conf.d \
+  && echo "/opt/ffmpeg/lib" >> /etc/ld.so.conf.d/ffmpeg.conf \
+  && ldconfig
 
 # 从构建阶段复制必要文件
 COPY --from=builder /opt/ffmpeg /opt/ffmpeg

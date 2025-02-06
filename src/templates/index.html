@@ -457,10 +457,22 @@
                 const response = await fetch('/latest_task');
                 if (response.ok) {
                     const task = await response.json();
-                    document.getElementById('url').value = `https://www.bilibili.com/video/${task.bvid}`;
-                    document.getElementById('outputDir').value = task.output_dir;
-                    document.getElementById('rename').checked = task.rename;
-                    document.getElementById('lastTask').style.display = 'none';
+
+                    // 检查任务类型是否为合集任务
+                    if (task.type === 'collection') {
+                        // 如果是合集任务，恢复合集链接
+                        const collectionUrl = `https://space.bilibili.com/${task.mid}/lists/${task.season_id}?type=season`;
+                        document.getElementById('url').value = collectionUrl;
+                        document.getElementById('outputDir').value = task.output_dir;
+                        document.getElementById('rename').checked = task.rename;
+                        document.getElementById('lastTask').style.display = 'none';
+                    }else {
+                        // 如果是单个视频任务，恢复视频链接
+                        document.getElementById('url').value = `https://www.bilibili.com/video/${task.bvid}`;
+                        document.getElementById('outputDir').value = task.output_dir;
+                        document.getElementById('rename').checked = task.rename;
+                        document.getElementById('lastTask').style.display = 'none';
+                    }
                 }
             } catch (error) {
                 console.error('恢复任务失败:', error);
@@ -555,45 +567,6 @@
             } finally {
                 submitBtn.disabled = false;
             }
-
-            try {
-                submitBtn.disabled = true;
-                status.style.display = 'block';
-                status.className = 'status info';
-                status.textContent = '正在检查播放列表...';
-
-                // 检查播放列表
-                const checkResponse = await fetch('/check_playlist', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({bvid})
-                });
-                const checkResult = await checkResponse.json();
-                
-                if (!checkResult.success) {
-                    throw new Error(checkResult.error);
-                }
-
-                // 开始下载
-                const downloadResponse = await fetch('/download', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({bvid, output_dir: outputDir, rename})
-                });
-                const downloadResult = await downloadResponse.json();
-                
-                if (!downloadResult.success) {
-                    throw new Error(downloadResult.error);
-                }
-
-                currentTaskId = downloadResult.task_id;
-                showSuccess('下载任务已创建');
-                updateTaskList();
-            } catch (error) {
-                showError(error.message);
-            } finally {
-                submitBtn.disabled = false;
-            }
         }
 
         function showError(message) {
@@ -645,8 +618,8 @@
                     taskElement.className = 'task-item';
                     taskElement.innerHTML = `
                         <div class="task-header">
-                            <div class="task-title">${task.title || '获取中...'}</div>
-                            <div class="task-bvid">BV号：${task.bvid}</div>
+                            <div class="task-title">${task.title || task.titles[task.index]}</div>
+                            <div class="task-bvid">BV号：${task.bvid || task.bvids[task.index]}</div>
                         </div>
                         <div class="task-info">输出目录：${task.output_dir}</div>
                         <div class="progress-bar">

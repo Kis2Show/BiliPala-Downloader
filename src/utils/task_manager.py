@@ -50,15 +50,19 @@ class TaskManager:
         try:
             collection_data = self.downloader.get_collection_info(mid, season_id)
             titles = [item['title'] for item in collection_data]
+            bvids = [item['bvid'] for item in collection_data]
         except Exception as e:
             logger.error(f"获取合集信息失败: {str(e)}")
             titles = []
+            bvids = []
 
         task = {
             'task_id': task_id,
+            'task_type': 'collection',
             'mid': mid,
             'season_id': season_id,
             'titles': titles,
+            'bvids': bvids,
             'output_dir': output_dir,
             'rename': rename,
             'status': 'pending',
@@ -97,6 +101,7 @@ class TaskManager:
                 progress = (index / total_videos) * 100
                 with self.tasks_lock:
                     task = self.tasks[task_id]
+                    task['index'] = index
                     task['progress'] = progress
                     task['last_update'] = datetime.now().isoformat()
                     self.save_tasks()

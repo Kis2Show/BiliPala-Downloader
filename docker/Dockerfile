@@ -103,7 +103,7 @@ WORKDIR /app
 RUN apk add --no-cache \
   libgcc \
   libstdc++ \
-  libjpeg \
+  libjpeg-turbo \
   libwebp \
   openssl \
   freetype \
@@ -111,10 +111,11 @@ RUN apk add --no-cache \
   x264 \
   libass \
   zlib \
-  python3 \
-  && mkdir -p /etc/ld.so.conf.d \
-  && echo "/opt/ffmpeg/lib" >> /etc/ld.so.conf.d/ffmpeg.conf \
-  && ldconfig
+  python3
+
+# 配置动态库路径
+RUN mkdir -p /etc/ld.so.conf.d && \
+  echo "/opt/ffmpeg/lib" >> /etc/ld.so.conf
 
 # 从构建阶段复制必要文件
 COPY --from=builder /opt/ffmpeg /opt/ffmpeg

@@ -41,8 +41,8 @@ RUN git clone --depth 1 --branch n5.1.3 https://github.com/FFmpeg/FFmpeg.git /tm
   true ;; \
   esac && \
   ./configure \
-  --cc="gcc" \                            # 明确指定编译器
-  --x86asmexe=yasm \                      # 强制使用yasm汇编器
+  --cc="gcc" \                            
+  --x86asmexe=yasm \                      
   --prefix=/opt/ffmpeg \
   --enable-gpl \
   --enable-libx264 \
@@ -59,10 +59,10 @@ RUN git clone --depth 1 --branch n5.1.3 https://github.com/FFmpeg/FFmpeg.git /tm
   --extra-cflags="-I/usr/include -fno-strict-aliasing" \
   --extra-ldflags="-L/usr/lib" \
   $(case $TARGETPLATFORM in \
-    "linux/amd64") echo "--arch=x86_64 --enable-x86asm" ;; \
-    "linux/arm64") echo "--arch=aarch64 --enable-neon" ;; \
-   esac) && \
-  make -j$(nproc) V=1 && \                # 开启详细输出
+  "linux/amd64") echo "--arch=x86_64 --enable-x86asm" ;; \
+  "linux/arm64") echo "--arch=aarch64 --enable-neon" ;; \
+  esac) && \
+  make -j$(nproc) V=1 && \               
   make install && \
   rm -rf /tmp/ffmpeg
 

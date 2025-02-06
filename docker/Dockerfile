@@ -34,21 +34,18 @@ ENV CXXFLAGS="${CFLAGS}"
 # 克隆并编译 FFmpeg 核心组件
 RUN git clone --depth 1 --branch n5.1.3 https://github.com/FFmpeg/FFmpeg.git /tmp/ffmpeg && \
   cd /tmp/ffmpeg && \
-  case $TARGETPLATFORM in \
-  "linux/amd64") \
-  echo -e '--- a/libavcodec/x86/mathops.h\n+++ b/libavcodec/x86/mathops.h\n@@ -132,7 +132,7 @@\n #   define NEG_USR32(a, s) " negl %k\n"        \\\n         " shrl %1, %k0\n"                      \\\n         : "+r"(a) : "Ic"((uint8_t)(s)));\n-#   define NEG_USR32(a, s) " shrl %1, %k\n"      \\\n+#   define NEG_USR32(a, s) " shrl %1, %k0\n"     \\\n         : "+r"(a) : "c"((uint8_t)(s)));       \\\n     } while (0)\n #  endif' | patch -p1 ;; \
-  "linux/arm64") \
-  true ;; \
-  esac && \
+  if [ "$TARGETPLATFORM" = "linux/amd64" ]; then \
+  sed -i 's/shrl \([^,]*\),%\(e\|r\)cx/shrl \1,%ecx/' libavcodec/x86/mathops.h; \
+  sed -i 's/shrl \([^,]*\),%\(e\|r\)ax/shrl \1,%eax/' libavcodec/x86/mathops.h; \
+  fi && \
   ./configure \
-  --cc="gcc" \
-  --x86asmexe=yasm \
   --prefix=/opt/ffmpeg \
   --enable-gpl \
   --enable-libx264 \
   --enable-libmp3lame \
   --enable-openssl \
   --enable-nonfree \
+  $(if [ "$TARGETPLATFORM" = "linux/amd64" ]; then echo "--disable-asm"; else echo "--enable-neon"; fi) \
   --disable-doc \
   --disable-avdevice \
   --disable-swresample \
@@ -56,13 +53,10 @@ RUN git clone --depth 1 --branch n5.1.3 https://github.com/FFmpeg/FFmpeg.git /tm
   --disable-avfilter \
   --disable-network \
   --disable-debug \
-  --extra-cflags="-I/usr/include -fno-strict-aliasing" \
+  --extra-cflags="-I/usr/include" \
   --extra-ldflags="-L/usr/lib" \
-  $(case $TARGETPLATFORM in \
-  "linux/amd64") echo "--arch=x86_64 --enable-x86asm" ;; \
-  "linux/arm64") echo "--arch=aarch64 --enable-neon" ;; \
-  esac) && \
-  make -j$(nproc) V=1 && \
+  --arch=$(if [ "$TARGETPLATFORM" = "linux/amd64" ]; then echo "x86_64"; else echo "aarch64"; fi) && \
+  make -j$(nproc) && \
   make install && \
   rm -rf /tmp/ffmpeg
 

@@ -111,9 +111,7 @@ RUN apk add --no-cache \
   x264 \
   libass \
   zlib \
-  ffmpeg \
   python3 \
-  # 必须的目录创建操作
   && mkdir -p /etc/ld.so.conf.d \
   && echo "/opt/ffmpeg/lib" >> /etc/ld.so.conf.d/ffmpeg.conf \
   && ldconfig

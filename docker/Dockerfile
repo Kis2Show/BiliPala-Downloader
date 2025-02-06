@@ -36,13 +36,13 @@ RUN git clone --depth 1 --branch n5.1.3 https://github.com/FFmpeg/FFmpeg.git /tm
   cd /tmp/ffmpeg && \
   case $TARGETPLATFORM in \
   "linux/amd64") \
-  patch -p1 <<< $'--- a/libavcodec/x86/mathops.h\n+++ b/libavcodec/x86/mathops.h\n@@ -132,7 +132,7 @@\n #   define NEG_USR32(a, s) " negl %k\n"        \\\n         " shrl %1, %k0\n"                      \\\n         : "+r"(a) : "Ic"((uint8_t)(s)));\n-#   define NEG_USR32(a, s) " shrl %1, %k\n"      \\\n+#   define NEG_USR32(a, s) " shrl %1, %k0\n"     \\\n         : "+r"(a) : "c"((uint8_t)(s)));       \\\n     } while (0)\n #  endif' ;; \
+  echo -e '--- a/libavcodec/x86/mathops.h\n+++ b/libavcodec/x86/mathops.h\n@@ -132,7 +132,7 @@\n #   define NEG_USR32(a, s) " negl %k\n"        \\\n         " shrl %1, %k0\n"                      \\\n         : "+r"(a) : "Ic"((uint8_t)(s)));\n-#   define NEG_USR32(a, s) " shrl %1, %k\n"      \\\n+#   define NEG_USR32(a, s) " shrl %1, %k0\n"     \\\n         : "+r"(a) : "c"((uint8_t)(s)));       \\\n     } while (0)\n #  endif' | patch -p1 ;; \
   "linux/arm64") \
   true ;; \
   esac && \
   ./configure \
-  --cc="gcc" \                            
-  --x86asmexe=yasm \                      
+  --cc="gcc" \
+  --x86asmexe=yasm \
   --prefix=/opt/ffmpeg \
   --enable-gpl \
   --enable-libx264 \
@@ -62,7 +62,7 @@ RUN git clone --depth 1 --branch n5.1.3 https://github.com/FFmpeg/FFmpeg.git /tm
   "linux/amd64") echo "--arch=x86_64 --enable-x86asm" ;; \
   "linux/arm64") echo "--arch=aarch64 --enable-neon" ;; \
   esac) && \
-  make -j$(nproc) V=1 && \               
+  make -j$(nproc) V=1 && \
   make install && \
   rm -rf /tmp/ffmpeg
 

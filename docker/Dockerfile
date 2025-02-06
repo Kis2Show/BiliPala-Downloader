@@ -34,6 +34,7 @@ RUN git clone --depth 1 --branch n4.4 https://github.com/FFmpeg/FFmpeg.git /tmp/
   --enable-libx264 \
   --enable-libmp3lame \
   --enable-openssl \
+  --enable-nonfree \
   --disable-doc \
   --disable-avdevice \
   --disable-swresample \

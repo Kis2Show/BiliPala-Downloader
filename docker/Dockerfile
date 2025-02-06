@@ -19,7 +19,9 @@ RUN apk add --no-cache --virtual .build-deps \
   automake \
   libtool \
   yasm \
-  nasm
+  nasm \
+  lame-dev \
+  x264-dev  
 
 # 克隆并编译 FFmpeg 核心组件
 RUN git clone --depth 1 --branch n4.4 https://github.com/FFmpeg/FFmpeg.git /tmp/ffmpeg && \
@@ -42,6 +44,8 @@ RUN git clone --depth 1 --branch n4.4 https://github.com/FFmpeg/FFmpeg.git /tmp/
   --disable-avfilter \
   --disable-network \
   --disable-debug \
+  --extra-cflags="-I/usr/include" \
+  --extra-ldflags="-L/usr/lib" \
   ${ARCH_FLAGS} && \
   make -j$(nproc) && \
   make install

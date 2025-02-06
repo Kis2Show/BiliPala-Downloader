@@ -3,6 +3,9 @@ FROM --platform=$BUILDPLATFORM python:3.9-alpine AS builder
 
 WORKDIR /app
 
+RUN apk add --update --no-cache \
+  coreutils  # 确保完整sed功能
+
 # 安装构建依赖
 RUN apk add --no-cache --virtual .build-deps \
   build-base \
@@ -23,14 +26,23 @@ RUN apk add --no-cache --virtual .build-deps \
   lame-dev \
   x264-dev  
 
+# 编译参数优化
+ENV ASFLAGS="-f elf64"
+ENV CFLAGS="-O2 -fno-stack-protector"
+ENV CXXFLAGS="${CFLAGS}"
+
 # 克隆并编译 FFmpeg 核心组件
-RUN git clone --depth 1 --branch n4.4 https://github.com/FFmpeg/FFmpeg.git /tmp/ffmpeg && \
+RUN git clone --depth 1 --branch n5.1.3 https://github.com/FFmpeg/FFmpeg.git /tmp/ffmpeg && \
   cd /tmp/ffmpeg && \
   case $TARGETPLATFORM in \
-  "linux/amd64") ARCH_FLAGS="--arch=x86_64 --enable-x86asm" ;; \
-  "linux/arm64") ARCH_FLAGS="--arch=aarch64 --enable-neon" ;; \
+  "linux/amd64") \
+  patch -p1 <<< $'--- a/libavcodec/x86/mathops.h\n+++ b/libavcodec/x86/mathops.h\n@@ -132,7 +132,7 @@\n #   define NEG_USR32(a, s) " negl %k\n"        \\\n         " shrl %1, %k0\n"                      \\\n         : "+r"(a) : "Ic"((uint8_t)(s)));\n-#   define NEG_USR32(a, s) " shrl %1, %k\n"      \\\n+#   define NEG_USR32(a, s) " shrl %1, %k0\n"     \\\n         : "+r"(a) : "c"((uint8_t)(s)));       \\\n     } while (0)\n #  endif' ;; \
+  "linux/arm64") \
+  true ;; \
   esac && \
   ./configure \
+  --cc="gcc" \                            # 明确指定编译器
+  --x86asmexe=yasm \                      # 强制使用yasm汇编器
   --prefix=/opt/ffmpeg \
   --enable-gpl \
   --enable-libx264 \
@@ -44,11 +56,15 @@ RUN git clone --depth 1 --branch n4.4 https://github.com/FFmpeg/FFmpeg.git /tmp/
   --disable-avfilter \
   --disable-network \
   --disable-debug \
-  --extra-cflags="-I/usr/include" \
+  --extra-cflags="-I/usr/include -fno-strict-aliasing" \
   --extra-ldflags="-L/usr/lib" \
-  ${ARCH_FLAGS} && \
-  make -j$(nproc) && \
-  make install
+  $(case $TARGETPLATFORM in \
+    "linux/amd64") echo "--arch=x86_64 --enable-x86asm" ;; \
+    "linux/arm64") echo "--arch=aarch64 --enable-neon" ;; \
+   esac) && \
+  make -j$(nproc) V=1 && \                # 开启详细输出
+  make install && \
+  rm -rf /tmp/ffmpeg
 
 # 安装Python依赖
 COPY requirements.txt .

@@ -44,7 +44,7 @@ COPY requirements.txt .
 COPY .env.example .env
 
 # 创建数据目录并设置权限
-RUN mkdir -p /app/Audiobooks \
+RUN mkdir -p /app/audiobooks \
     && mkdir -p /app/download_tasks \
     && mkdir -p /app/download_history \
     && mkdir -p /app/config \
@@ -55,7 +55,7 @@ RUN mkdir -p /app/Audiobooks \
 EXPOSE 5000
 
 # 设置数据卷
-VOLUME ["/app/Audiobooks", "/app/download_tasks", "/app/download_history", "/app/config"]
+VOLUME ["/app/audiobooks", "/app/download_tasks", "/app/download_history", "/app/config"]
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \

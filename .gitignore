@@ -13,9 +13,10 @@ ffmpeg*.zip
 *.tmp
 
 # Audio books
-Audiobooks/
+audiobooks/
 
 # Test files
+.vscode/
 tests/
 *.pyc
 __pycache__/

@@ -1,14 +1,15 @@
-# BiliPala有声下载器
+# BiliPala 有声下载器
 
 背靠 Bilibili 视频资源，只需要一个播放链接，即可自动化提取该播放列表下所有有声书资源至本地，自动截取封面，直接可用。
 
 ## 功能特点
 
-- 支持单个视频和多P视频的音频提取
+- 支持单个视频和多 P 视频的音频提取
+- 新增合集下载
 - 自动提取视频封面并优化
 - 支持断点续传
 - 自动添加音频元数据
-- 美观的Web界面
+- 美观的 Web 界面
 - 实时下载进度显示
 - 支持并发下载和处理
 - 音频命名支持关键字屏蔽
@@ -28,12 +29,14 @@
 ## 安装步骤
 
 1. 克隆仓库：
+
 ```bash
 git clone https://github.com/yourusername/bilibili_audio_downloader.git
 cd bilibili_audio_downloader
 ```
 
 2. 创建并激活虚拟环境：
+
 ```bash
 python -m venv venv
 .\venv\Scripts\activate  # Windows
@@ -41,17 +44,20 @@ source venv/bin/activate  # Linux/MacOS
 ```
 
 3. 安装依赖：
+
 ```bash
 pip install -r requirements.txt
 ```
 
 4. 配置环境变量：
+
 ```bash
 copy .env.example .env  # Windows
 cp .env.example .env    # Linux/MacOS
 ```
 
 5. 编辑 `.env` 文件，配置相关参数：
+
 ```env
 DOWNLOAD_DIR=downloads
 MAX_RETRIES=3
@@ -78,7 +84,7 @@ git clone 本项目至本地电脑
 
 ## 使用说明
 
-1. 在输入框中粘贴B站视频链接（支持普通视频和多P视频）
+1. 在输入框中粘贴 B 站视频链接（支持普通视频和多 P 视频）
 2. 点击下载按钮开始处理
 3. 等待下载和处理完成
 4. 在下载目录中查看处理好的音频文件

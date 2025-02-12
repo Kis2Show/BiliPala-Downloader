@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   bilipala-downloader:
-    image: kis2show/bilipala-downloader:latest
+    image: nbzzd6/bilipala-downloader:latest
     ports:
       - "5000:5000"
     volumes:

@@ -57,12 +57,12 @@
         }
 
         h2 {
-            font-size: 24px;
+            font-size: 20px;
             line-height: 1.16667;
             font-weight: 600;
-            letter-spacing: .009em;
+            letter-spacing: .012em;
             color: var(--text-primary);
-            margin: 35px 0 17px 0;
+            margin: 35px 2px 17px 2px;
         }
 
         .form-group {
@@ -457,10 +457,22 @@
                 const response = await fetch('/latest_task');
                 if (response.ok) {
                     const task = await response.json();
-                    document.getElementById('url').value = `https://www.bilibili.com/video/${task.bvid}`;
-                    document.getElementById('outputDir').value = task.output_dir;
-                    document.getElementById('rename').checked = task.rename;
-                    document.getElementById('lastTask').style.display = 'none';
+
+                    // 检查任务类型是否为合集任务
+                    if (task.type === 'collection') {
+                        // 如果是合集任务，恢复合集链接
+                        const collectionUrl = `https://space.bilibili.com/${task.mid}/lists/${task.season_id}?type=season`;
+                        document.getElementById('url').value = collectionUrl;
+                        document.getElementById('outputDir').value = task.output_dir;
+                        document.getElementById('rename').checked = task.rename;
+                        document.getElementById('lastTask').style.display = 'none';
+                    }else {
+                        // 如果是单个视频任务，恢复视频链接
+                        document.getElementById('url').value = `https://www.bilibili.com/video/${task.bvid}`;
+                        document.getElementById('outputDir').value = task.output_dir;
+                        document.getElementById('rename').checked = task.rename;
+                        document.getElementById('lastTask').style.display = 'none';
+                    }
                 }
             } catch (error) {
                 console.error('恢复任务失败:', error);
@@ -475,13 +487,41 @@
             const submitBtn = document.getElementById('submitBtn');
             const status = document.getElementById('status');
             
-            // 从URL中提取BV号
-            const bvMatch = url.match(/BV[a-zA-Z0-9]+/);
-            if (!bvMatch) {
-                showError('无效的B站视频链接');
-                return;
+            // 从URL中提取BV号或合集信息
+            let params = {}; // 使用对象存储参数
+            let isValidLink = false;
+            
+            // 匹配第一种合集链接格式：https://space.bilibili.com/{mid}/lists/{season_id}?type=season
+            let match1 = url.match(/https:\/\/space\.bilibili\.com\/(\d+)\/lists\/(\d+)\?type=season/);
+            if (match1) {
+                params.mid = match1[1]; // 提取用户ID (mid)
+                params.season_id = match1[2]; // 提取合集ID (season_id)
+                console.log('处理合集，获得数据:', params.mid, params.season_id);
+                isValidLink = true; // 标记为有效链接
             }
-            const bvid = bvMatch[0];
+            
+            // 匹配第二种合集链接格式：https://space.bilibili.com/{mid}/lists?sid={season_id}
+            let match2 = url.match(/https:\/\/space\.bilibili\.com\/(\d+)\/lists\?sid=(\d+)/);
+            if (match2) {
+                params.mid = match2[1]; // 提取用户ID (mid)
+                params.season_id = match2[2]; // 提取合集ID (season_id)
+                console.log('处理合集，获得数据:', params.mid, params.season_id);
+                isValidLink = true; // 标记为有效链接
+            }
+            
+            // 匹配单个视频链接或 BV 号格式：BV + 10位字母数字组合
+            let bvMatch = url.match(/BV[a-zA-Z0-9]{10}/);
+            if (bvMatch) {
+                params.bvid = bvMatch[0]; // 提取 BV 号
+                console.log('获得BVid:', params.bvid);
+                isValidLink = true; // 标记为有效链接
+            } 
+            
+            // 如果没有匹配到任何有效链接，调用 showError 方法并停止执行
+            if (!isValidLink) {
+                showError('无效的B站链接'); // 展示错误信息
+                return; // 停止执行后续代码
+            }
 
             try {
                 submitBtn.disabled = true;
@@ -489,14 +529,15 @@
                 status.className = 'status info';
                 status.textContent = '正在检查播放列表...';
 
-                // 检查播放列表
+                // 检查播放列表或合集
                 const checkResponse = await fetch('/check_playlist', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({bvid})
+                    body: JSON.stringify({ params }) // 将 params 作为参数传递
                 });
+
                 const checkResult = await checkResponse.json();
-                
+
                 if (!checkResult.success) {
                     throw new Error(checkResult.error);
                 }
@@ -505,8 +546,13 @@
                 const downloadResponse = await fetch('/download', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({bvid, output_dir: outputDir, rename})
+                    body: JSON.stringify({
+                        ...params, // 展开 params 对象
+                        output_dir: outputDir,
+                        rename
+                    })
                 });
+                
                 const downloadResult = await downloadResponse.json();
                 
                 if (!downloadResult.success) {
@@ -572,8 +618,8 @@
                     taskElement.className = 'task-item';
                     taskElement.innerHTML = `
                         <div class="task-header">
-                            <div class="task-title">${task.title || '获取中...'}</div>
-                            <div class="task-bvid">BV号：${task.bvid}</div>
+                            <div class="task-title">${task.title || task.titles[task.index]}</div>
+                            <div class="task-bvid">BV号：${task.bvid || task.bvids[task.index]}</div>
                         </div>
                         <div class="task-info">输出目录：${task.output_dir}</div>
                         <div class="progress-bar">

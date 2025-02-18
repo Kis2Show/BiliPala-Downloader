@@ -504,18 +504,18 @@
             <div id="filterPanel" class="filter-panel" style="display: none;">
                 <div class="filter-section">
                     <label>字符过滤（用逗号分隔）</label>
-                    <input type="text" id="charFilter" placeholder="例如: ?, !, *">
+                    <input type="text" id="charFilter" placeholder="例如: ?, !, *" onchange="saveFilterRules()">
                 </div>
                 <div class="filter-section">
                     <label>关键词过滤（每行一个）</label>
-                    <textarea id="keywordFilter" rows="4" placeholder="每行输入一个关键词"></textarea>
+                    <textarea id="keywordFilter" rows="4" placeholder="每行输入一个关键词" onchange="saveFilterRules()"></textarea>
                 </div>
                 <div class="filter-section">
                     <label>替换规则</label>
                     <div id="replaceRules">
                         <div class="replace-rule">
-                            <input type="text" placeholder="查找内容" class="find-text">
-                            <input type="text" placeholder="替换为" class="replace-text">
+                            <input type="text" placeholder="查找内容" class="find-text" onchange="saveFilterRules()">
+                            <input type="text" placeholder="替换为" class="replace-text" onchange="saveFilterRules()">
                             <button type="button" class="remove-rule" onclick="removeReplaceRule(this)">-</button>
                         </div>
                     </div>
@@ -535,13 +535,66 @@
                     filterArrow.classList.toggle('expanded');
                 }
 
-                function addReplaceRule() {
+                // 页面加载时加载过滤规则
+                window.addEventListener('load', loadFilterRules);
+
+                async function loadFilterRules() {
+                    try {
+                        const response = await fetch('/filter_rules');
+                        if (response.ok) {
+                            const rules = await response.json();
+                            document.getElementById('charFilter').value = rules.remove_chars.join(',');
+                            document.getElementById('keywordFilter').value = rules.remove_words.join('\n');
+                            
+                            // 清空现有替换规则
+                            const rulesContainer = document.getElementById('replaceRules');
+                            rulesContainer.innerHTML = '';
+                            
+                            // 添加替换规则
+                            rules.replace_rules.forEach(rule => {
+                                addReplaceRule(rule.from, rule.to);
+                            });
+                        }
+                    } catch (error) {
+                        console.error('加载过滤规则失败:', error);
+                    }
+                }
+
+                async function saveFilterRules() {
+                    const charFilter = document.getElementById('charFilter').value;
+                    const keywordFilter = document.getElementById('keywordFilter').value;
+                    const replaceRules = Array.from(document.querySelectorAll('.replace-rule')).map(rule => ({
+                        from: rule.querySelector('.find-text').value,
+                        to: rule.querySelector('.replace-text').value
+                    })).filter(rule => rule.from && rule.to);
+
+                    const rules = {
+                        remove_chars: charFilter.split(',').map(char => char.trim()).filter(char => char),
+                        remove_words: keywordFilter.split('\n').map(word => word.trim()).filter(word => word),
+                        replace_rules: replaceRules
+                    };
+
+                    try {
+                        const response = await fetch('/filter_rules', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(rules)
+                        });
+                        if (!response.ok) {
+                            throw new Error('保存过滤规则失败');
+                        }
+                    } catch (error) {
+                        console.error('保存过滤规则失败:', error);
+                    }
+                }
+
+                function addReplaceRule(from = '', to = '') {
                     const rulesContainer = document.getElementById('replaceRules');
                     const newRule = document.createElement('div');
                     newRule.className = 'replace-rule';
                     newRule.innerHTML = `
-                        <input type="text" placeholder="查找内容" class="find-text">
-                        <input type="text" placeholder="替换为" class="replace-text">
+                        <input type="text" placeholder="查找内容" class="find-text" value="${from}" onchange="saveFilterRules()">
+                        <input type="text" placeholder="替换为" class="replace-text" value="${to}" onchange="saveFilterRules()">
                         <button type="button" class="remove-rule" onclick="removeReplaceRule(this)">-</button>
                     `;
                     rulesContainer.appendChild(newRule);
@@ -549,6 +602,7 @@
 
                 function removeReplaceRule(button) {
                     button.closest('.replace-rule').remove();
+                    saveFilterRules();
                 }
             </script>
         </form>

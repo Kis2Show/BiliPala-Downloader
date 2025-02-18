@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, Response
 from utils.task_manager import TaskManager
+from utils.title_filter import TitleFilter
 import os
 import json
 import logging
@@ -15,6 +16,7 @@ logger = logging.getLogger('BiliDownloader-Web')
 
 app = Flask(__name__)
 task_manager = TaskManager()
+title_filter = TitleFilter()
 
 @app.route('/')
 def index():
@@ -90,6 +92,23 @@ def cleanup_tasks():
     """清理已完成的任务"""
     task_manager.cleanup_completed_tasks()
     return jsonify({'success': True, 'message': '已清理完成的任务'})
+
+@app.route('/filter_rules', methods=['GET', 'POST'])
+def filter_rules():
+    """获取或更新过滤规则"""
+    if request.method == 'GET':
+        return jsonify(title_filter.get_config())
+    else:
+        try:
+            rules = request.get_json()
+            title_filter.remove_chars = rules.get('remove_chars', [])
+            title_filter.remove_words = rules.get('remove_words', [])
+            title_filter.replace_rules = rules.get('replace_rules', [])
+            title_filter.save_config()
+            return jsonify({'success': True})
+        except Exception as e:
+            logger.error(f"保存过滤规则失败：{str(e)}")
+            return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
     logger.info("启动 Web 服务器")

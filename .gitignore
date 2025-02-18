@@ -19,7 +19,8 @@ Audiobooks/
 tests/
 *.pyc
 __pycache__/
-src\utils\__pycache__
+src\utils\__pycache__/
+.pytest_cache/
 
 # Download history and tasks
 download_history/

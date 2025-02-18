@@ -303,7 +303,6 @@
             align-items: center;
             gap: 8px;
         }
-
         .task-list h2::before {
             content: '';
             width: 4px;
@@ -321,6 +320,102 @@
             transition: all 0.3s;
         }
 
+        .filter-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 16px;
+            cursor: pointer;
+            color: var(--primary-color);
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .filter-toggle:hover {
+            opacity: 0.8;
+        }
+
+        .filter-arrow {
+            display: inline-block;
+            transition: transform 0.3s;
+            color: var(--primary-color);
+        }
+
+        .filter-arrow.expanded {
+            transform: rotate(90deg);
+        }
+
+        .filter-panel {
+            background-color: var(--background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 16px;
+        }
+
+        .filter-section {
+            margin-bottom: 20px;
+        }
+
+        .filter-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .filter-section textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-sizing: border-box;
+            font-size: 15px;
+            line-height: 1.4;
+            resize: vertical;
+            min-height: 100px;
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+
+        .filter-section textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            background-color: var(--card-background);
+            box-shadow: 0 0 0 4px rgba(0,102,204,0.1);
+        }
+
+        .replace-rule {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .replace-rule input {
+            flex: 1;
+        }
+
+        .replace-rule button {
+            padding: 8px 16px;
+            min-width: auto;
+        }
+
+        .add-rule {
+            background-color: transparent;
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+            margin-top: 8px;
+        }
+
+        .add-rule:hover {
+            background-color: rgba(0,102,204,0.1);
+        }
+
+        .remove-rule {
+            background-color: var(--error-color);
+            padding: 8px 16px;
+            min-width: auto;
+        }
+
+        .remove-rule:hover {
+            background-color: #ff4f45;
+        }
         .last-task-container:hover {
             box-shadow: var(--shadow-lg);
             transform: translateY(-2px);
@@ -401,9 +496,61 @@
             </div>
             <div class="form-group checkbox-wrapper">
                 <input type="checkbox" id="rename">
-                <label for="rename" style="margin: 0;">重命名文件（去除特殊字符）</label>
+                <label for="rename" style="margin: 0;">重命名文件</label>
+                <div class="filter-toggle" onclick="toggleFilter(event)">
+                    <span class="filter-arrow">▶</span>
+                </div>
+            </div>
+            <div id="filterPanel" class="filter-panel" style="display: none;">
+                <div class="filter-section">
+                    <label>字符过滤（用逗号分隔）</label>
+                    <input type="text" id="charFilter" placeholder="例如: ?, !, *">
+                </div>
+                <div class="filter-section">
+                    <label>关键词过滤（每行一个）</label>
+                    <textarea id="keywordFilter" rows="4" placeholder="每行输入一个关键词"></textarea>
+                </div>
+                <div class="filter-section">
+                    <label>替换规则</label>
+                    <div id="replaceRules">
+                        <div class="replace-rule">
+                            <input type="text" placeholder="查找内容" class="find-text">
+                            <input type="text" placeholder="替换为" class="replace-text">
+                            <button type="button" class="remove-rule" onclick="removeReplaceRule(this)">-</button>
+                        </div>
+                    </div>
+                    <button type="button" class="add-rule" onclick="addReplaceRule()">添加规则</button>
+                </div>
             </div>
             <button type="submit" id="submitBtn">开始下载</button>
+
+            <script>
+                function toggleFilter(event) {
+                    event.preventDefault();
+                    const filterPanel = document.getElementById('filterPanel');
+                    const filterArrow = document.querySelector('.filter-arrow');
+                    const isHidden = filterPanel.style.display === 'none';
+                    
+                    filterPanel.style.display = isHidden ? 'block' : 'none';
+                    filterArrow.classList.toggle('expanded');
+                }
+
+                function addReplaceRule() {
+                    const rulesContainer = document.getElementById('replaceRules');
+                    const newRule = document.createElement('div');
+                    newRule.className = 'replace-rule';
+                    newRule.innerHTML = `
+                        <input type="text" placeholder="查找内容" class="find-text">
+                        <input type="text" placeholder="替换为" class="replace-text">
+                        <button type="button" class="remove-rule" onclick="removeReplaceRule(this)">-</button>
+                    `;
+                    rulesContainer.appendChild(newRule);
+                }
+
+                function removeReplaceRule(button) {
+                    button.closest('.replace-rule').remove();
+                }
+            </script>
         </form>
 
         <div id="status" class="status" style="display: none;"></div>
@@ -590,4 +737,4 @@
         }
     </script>
 </body>
-</html> 
+</html>

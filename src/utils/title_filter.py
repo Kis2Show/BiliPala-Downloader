@@ -9,6 +9,7 @@ class TitleFilter:
         self.config_file = config_file
         self.remove_chars = []
         self.remove_words = []
+        self.replace_rules = []
         self.load_config()
     
     def load_config(self):
@@ -19,7 +20,8 @@ class TitleFilter:
                     config = json.load(f)
                     self.remove_chars = config.get('remove_chars', [])
                     self.remove_words = config.get('remove_words', [])
-                logger.info(f"加载标题过滤配置：{len(self.remove_chars)} 个字符，{len(self.remove_words)} 个关键词")
+                    self.replace_rules = config.get('replace_rules', [])
+                logger.info(f"加载标题过滤配置：{len(self.remove_chars)} 个字符，{len(self.remove_words)} 个关键词，{len(self.replace_rules)} 个替换规则")
             else:
                 logger.warning(f"过滤配置文件不存在：{self.config_file}")
         except Exception as e:
@@ -39,6 +41,10 @@ class TitleFilter:
         for word in self.remove_words:
             filtered_title = filtered_title.replace(word, '')
         
+        # 应用替换规则
+        for rule in self.replace_rules:
+            filtered_title = filtered_title.replace(rule['from'], rule['to'])
+        
         # 清理多余的空格
         filtered_title = ' '.join(filtered_title.split())
         
@@ -51,7 +57,8 @@ class TitleFilter:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump({
                     'remove_chars': self.remove_chars,
-                    'remove_words': self.remove_words
+                    'remove_words': self.remove_words,
+                    'replace_rules': self.replace_rules
                 }, f, ensure_ascii=False, indent=4)
             logger.info("过滤配置已保存")
         except Exception as e:
@@ -85,5 +92,20 @@ class TitleFilter:
         """获取当前配置"""
         return {
             'remove_chars': self.remove_chars,
-            'remove_words': self.remove_words
-        } 
+            'remove_words': self.remove_words,
+            'replace_rules': self.replace_rules
+        }
+    
+    def add_replace_rule(self, from_text: str, to_text: str):
+        """添加替换规则"""
+        rule = {'from': from_text, 'to': to_text}
+        if rule not in self.replace_rules:
+            self.replace_rules.append(rule)
+            self.save_config()
+    
+    def remove_replace_rule(self, from_text: str, to_text: str):
+        """删除替换规则"""
+        rule = {'from': from_text, 'to': to_text}
+        if rule in self.replace_rules:
+            self.replace_rules.remove(rule)
+            self.save_config()

@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [ "main" ]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -45,5 +49,3 @@ jobs:
             ${{ secrets.DOCKERHUB_USERNAME }}/bilipala-downloader:${{ github.sha }}
             ghcr.io/kis2show/bilipala-downloader:latest
             ghcr.io/kis2show/bilipala-downloader:${{ github.sha }}
-
-

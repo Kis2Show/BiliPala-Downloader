@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -42,5 +43,5 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/bilipala-downloader:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/bilipala-downloader:${{ github.sha }}
-            ghcr.io/${{ github.repository }}/bilipala-downloader:latest
-            ghcr.io/${{ github.repository }}/bilipala-downloader:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/bilipala-downloader:latest
+            ghcr.io/${{ github.repository_owner }}/bilipala-downloader:${{ github.sha }}

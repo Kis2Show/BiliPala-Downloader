@@ -43,5 +43,7 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/bilipala-downloader:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/bilipala-downloader:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/bilipala-downloader:latest
-            ghcr.io/${{ github.repository_owner }}/bilipala-downloader:${{ github.sha }}
+            ghcr.io/kis2show/bilipala-downloader:latest
+            ghcr.io/kis2show/bilipala-downloader:${{ github.sha }}
+
+

@@ -390,32 +390,39 @@
         .replace-rule input {
             flex: 1;
         }
-
         .replace-rule button {
-            padding: 8px 16px;
-            min-width: auto;
-        }
+    padding: 8px;
+    min-width: auto;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
 
-        .add-rule {
-            background-color: transparent;
-            color: var(--primary-color);
-            border: 1px solid var(--primary-color);
-            margin-top: 8px;
-        }
+.add-rule {
+    background-color: transparent;
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    margin-top: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+}
 
-        .add-rule:hover {
-            background-color: rgba(0,102,204,0.1);
-        }
+.add-rule:hover {
+    background-color: rgba(0,102,204,0.1);
+}
 
-        .remove-rule {
-            background-color: var(--error-color);
-            padding: 8px 16px;
-            min-width: auto;
-        }
+.remove-rule {
+    background-color: #e0e0e0;
+    color: #424245;
+    font-weight: bold;
+}
 
-        .remove-rule:hover {
-            background-color: #ff4f45;
-        }
+.remove-rule:hover {
+    background-color: #d0d0d0;
+}
         .last-task-container:hover {
             box-shadow: var(--shadow-lg);
             transform: translateY(-2px);

@@ -6,9 +6,9 @@ on:
   workflow_dispatch:  # 允许手动触发
 
 permissions:
-  contents: read
-  packages: write
-
+  actions: write
+  repository-projects: write
+  
 jobs:
   check-update:
     runs-on: ubuntu-latest

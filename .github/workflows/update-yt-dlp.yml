@@ -28,6 +28,6 @@ jobs:
         if: steps.ytdlp.outputs.latest_version != steps.ytdlp.outputs.current_version
         uses: peter-evans/repository-dispatch@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.REPO_ACCESS_TOKEN }}
           event-type: update-yt-dlp
           client-payload: '{"version": "${{ steps.ytdlp.outputs.latest_version }}"}'

@@ -359,9 +359,9 @@ class BiliDownloader:
         self.save_task_state(task_id, self.active_tasks[task_id])
 
         # 加载下载配置
-        max_retries = int(os.getenv('MAX_RETRIES', '3'))
-        timeout = int(os.getenv('TIMEOUT', '30'))
-        concurrent_downloads = int(os.getenv('CONCURRENT_DOWNLOADS', '5'))
+        max_retries = int(os.getenv('MAX_RETRIES', '5'))  # 增加默认重试次数
+        timeout = int(os.getenv('TIMEOUT', '60'))  # 增加默认超时时间
+        concurrent_downloads = int(os.getenv('CONCURRENT_DOWNLOADS', '3'))  # 降低并发数以提高稳定性
 
         # 创建一个队列来存储进度信息
         progress_queue = []
@@ -419,6 +419,13 @@ class BiliDownloader:
             'retries': max_retries,
             'socket_timeout': timeout,
             'concurrent_fragment_downloads': concurrent_downloads,
+            'extractor_retries': max_retries,  # 增加提取器重试次数
+            'file_access_retries': max_retries,  # 增加文件访问重试次数
+            'fragment_retries': max_retries,  # 增加片段下载重试次数
+            'retry_sleep_functions': {'http': lambda n: 5 * (2 ** (n - 1))},  # 指数退避重试
+            'http_headers': self.headers,  # 使用自定义请求头
+            'nocheckcertificate': True,  # 忽略SSL证书验证
+            'cookiesfrombrowser': ('chrome',),  # 尝试从浏览器获取cookie
         }
 
         count = self.check_playlist(bvid)

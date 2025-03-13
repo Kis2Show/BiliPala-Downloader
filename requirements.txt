@@ -1,6 +1,6 @@
 flask==3.0.0
 werkzeug==3.0.1
-yt-dlp==2024.08.01
+yt-dlp>=2024.08.01
 requests>=2.32.2,<3
 python-dotenv==1.0.0
 flask-cors==4.0.0

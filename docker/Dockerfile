@@ -15,8 +15,8 @@ RUN apk add --no-cache --virtual .build-deps \
     make \
     pkgconf
 
-# 安装 ffmpeg
-RUN apk add --no-cache ffmpeg
+# 安装 ffmpeg 和其他运行时依赖
+RUN apk add --no-cache ffmpeg python3-dev gcc musl-dev libffi-dev
 
 # 安装Python依赖
 COPY requirements.txt .
@@ -31,7 +31,7 @@ FROM python:3.9-alpine
 WORKDIR /app
 
 # 安装运行时依赖
-RUN apk add --no-cache ffmpeg \
+RUN apk add --no-cache ffmpeg python3-dev gcc musl-dev libffi-dev \
     && addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # 从构建阶段复制Python包

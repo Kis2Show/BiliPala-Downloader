@@ -353,7 +353,7 @@ class BiliDownloader:
     def download(self, bvid: str, output_dir: str, rename: bool = False) -> Generator[Dict[str, Any], None, None]:
         """下载音频文件"""
         start_time = datetime.now()
-        base_path = os.path.join(os.getenv('DOWNLOAD_DIR', 'Audiobooks'), output_dir)
+        base_path = os.path.join(os.getenv('DOWNLOAD_DIR', 'audiobooks'), output_dir)
         os.makedirs(base_path, exist_ok=True)
         logger.info(f"创建输出目录：{base_path}")
 
@@ -369,9 +369,9 @@ class BiliDownloader:
         self.save_task_state(task_id, self.active_tasks[task_id])
 
         # 加载下载配置
-        max_retries = int(os.getenv('MAX_RETRIES', '3'))
-        timeout = int(os.getenv('TIMEOUT', '30'))
-        concurrent_downloads = int(os.getenv('CONCURRENT_DOWNLOADS', '5'))
+        max_retries = int(os.getenv('MAX_RETRIES', '5'))  # 增加默认重试次数
+        timeout = int(os.getenv('TIMEOUT', '60'))  # 增加默认超时时间
+        concurrent_downloads = int(os.getenv('CONCURRENT_DOWNLOADS', '3'))  # 降低并发数以提高稳定性
 
         # 创建一个队列来存储进度信息
         progress_queue = []
@@ -732,170 +732,3 @@ class BiliDownloader:
         except Exception as e:
             logger.error(f"处理封面时出错: {str(e)}")
             return None
-
-    def extract_series_info(self, url: str) -> Tuple[str, str]:
-        """从合集链接中提取UP主ID和合集ID"""
-        try:
-            # 尝试直接从URL中提取uid和sid
-            uid_match = re.search(r'(?:/|^)(\d+)(?:/|$)', url)
-            # 支持两种格式：
-            # 1. sid=数字
-            # 2. /lists/数字
-            sid_match = re.search(r'(?:sid=|/lists/)(\d+)(?:$|[^\d])', url)
-            
-            if not uid_match:
-                raise ValueError("无法提取UP主ID")
-            if not sid_match:
-                raise ValueError("无法提取合集ID")
-            
-            uid = uid_match.group(1)
-            sid = sid_match.group(1)
-            
-            logger.info(f"成功解析合集信息：UP主ID={uid}, 合集ID={sid}")
-            return uid, sid
-        except Exception as e:
-            logger.error(f"解析合集链接失败：{str(e)}")
-            raise ValueError("无效的合集链接格式")
-
-    def get_series_videos(self, uid: str, sid: str) -> List[Dict[str, Any]]:
-        """获取合集中的所有视频信息"""
-        videos = []
-        page = 1
-        page_size = 30
-        
-        try:
-            while True:
-                # 构造API请求
-                params = {
-                    'mid': uid,
-                    'season_id': sid,
-                    'sort_reverse': False,
-                    'page_num': page,
-                    'page_size': page_size
-                }
-                
-                # 发送请求
-                response = requests.get(
-                    self.series_api_url,
-                    params=params,
-                    headers=self.headers
-                )
-                response.raise_for_status()
-                data = response.json()
-                
-                if data['code'] != 0:
-                    raise ValueError(f"API错误：{data.get('message', '未知错误')}")
-                
-                # 提取视频信息
-                archives = data['data']['archives']
-                if not archives:
-                    break
-                
-                for video in archives:
-                    videos.append({
-                        'bvid': video['bvid'],
-                        'title': video['title'],
-                        'description': video.get('description', ''),
-                        'duration': video.get('duration', 0),
-                        'created': video.get('ctime', 0)
-                    })
-                
-                # 检查是否还有更多页
-                if len(archives) < page_size:
-                    break
-                    
-                page += 1
-                time.sleep(1)  # 避免请求过快
-            
-            logger.info(f"成功获取合集视频列表：{len(videos)} 个视频")
-            return videos
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"请求合集API失败：{str(e)}")
-            raise ValueError("获取合集信息失败，请检查网络连接")
-        except Exception as e:
-            logger.error(f"处理合集信息失败：{str(e)}")
-            raise ValueError(f"处理合集信息失败：{str(e)}")
-
-    def download_series(self, url: str, output_dir: str, rename: bool = False) -> Generator[Dict[str, Any], None, None]:
-        """下载整个合集"""
-        try:
-            # 解析合集链接
-            uid, sid = self.extract_series_info(url)
-            
-            # 获取合集中的所有视频
-            videos = self.get_series_videos(uid, sid)
-            total_videos = len(videos)
-            
-            if not videos:
-                raise ValueError("未找到任何视频")
-            
-            logger.info(f"开始下载合集：共 {total_videos} 个视频")
-            
-            # 创建合集目录
-            series_dir = os.path.join(output_dir, f"series_{sid}")
-            os.makedirs(series_dir, exist_ok=True)
-            
-            completed_count = 0
-            total_progress = 0
-            
-            # 遍历下载每个视频
-            for index, video in enumerate(videos, 1):
-                bvid = video['bvid']
-                video_progress = 0
-                
-                try:
-                    logger.info(f"开始下载第 {index}/{total_videos} 个视频：{bvid}")
-                    
-                    # 使用生成器下载单个视频
-                    for progress_info in self.download(bvid, series_dir, rename):
-                        if progress_info['status'] == 'progress':
-                            # 计算整体进度
-                            video_progress = progress_info['progress']
-                            total_progress = (completed_count * 100 + video_progress) / total_videos
-                            
-                            # 更新进度信息
-                            progress_info.update({
-                                'series_progress': total_progress,
-                                'current_video': index,
-                                'total_videos': total_videos,
-                                'video_title': video['title']
-                            })
-                        
-                        yield progress_info
-                    
-                    completed_count += 1
-                    logger.info(f"视频 {bvid} 下载完成")
-                    
-                except Exception as e:
-                    logger.error(f"下载视频 {bvid} 失败：{str(e)}")
-                    yield {
-                        'status': 'error',
-                        'message': f'下载视频失败：{str(e)}',
-                        'series_progress': total_progress,
-                        'current_video': index,
-                        'total_videos': total_videos,
-                        'video_title': video['title']
-                    }
-                
-                # 添加延迟，避免请求过快
-                time.sleep(2)
-            
-            logger.info(f"合集下载完成：成功 {completed_count}/{total_videos}")
-            
-        except Exception as e:
-            logger.error(f"下载合集失败：{str(e)}")
-            yield {
-                'status': 'error',
-                'message': f'下载合集失败：{str(e)}'
-            }
-
-    def is_series_url(self, url: str) -> bool:
-        """判断是否包含合集信息"""
-        try:
-            # 检查是否同时包含uid和sid
-            has_uid = bool(re.search(r'(?:/|^)(\d+)(?:/|$)', url))
-            has_sid = bool(re.search(r'(?:sid=|/lists/)(\d+)(?:$|[^\d])', url))
-            return has_uid and has_sid
-        except:
-            return False

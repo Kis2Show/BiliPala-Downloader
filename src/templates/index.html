@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>B站音频下载器</title>
+    <title>BiliPala有声下载器</title>
     <style>
         :root {
             --primary-color: #0066cc;
@@ -303,7 +303,6 @@
             align-items: center;
             gap: 8px;
         }
-
         .task-list h2::before {
             content: '';
             width: 4px;
@@ -321,6 +320,109 @@
             transition: all 0.3s;
         }
 
+        .filter-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: 16px;
+            cursor: pointer;
+            color: var(--primary-color);
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .filter-toggle:hover {
+            opacity: 0.8;
+        }
+
+        .filter-arrow {
+            display: inline-block;
+            transition: transform 0.3s;
+            color: var(--primary-color);
+        }
+
+        .filter-arrow.expanded {
+            transform: rotate(90deg);
+        }
+
+        .filter-panel {
+            background-color: var(--background);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 16px;
+        }
+
+        .filter-section {
+            margin-bottom: 20px;
+        }
+
+        .filter-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .filter-section textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-sizing: border-box;
+            font-size: 15px;
+            line-height: 1.4;
+            resize: vertical;
+            min-height: 100px;
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+
+        .filter-section textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            background-color: var(--card-background);
+            box-shadow: 0 0 0 4px rgba(0,102,204,0.1);
+        }
+
+        .replace-rule {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .replace-rule input {
+            flex: 1;
+        }
+        .replace-rule button {
+    padding: 8px;
+    min-width: auto;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.add-rule {
+    background-color: transparent;
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    margin-top: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+}
+
+.add-rule:hover {
+    background-color: rgba(0,102,204,0.1);
+}
+
+.remove-rule {
+    background-color: #e0e0e0;
+    color: #424245;
+    font-weight: bold;
+}
+
+.remove-rule:hover {
+    background-color: #d0d0d0;
+}
         .last-task-container:hover {
             box-shadow: var(--shadow-lg);
             transform: translateY(-2px);
@@ -369,8 +471,8 @@
             }
 
             h1 {
-                font-size: 32px;
-                margin-bottom: 32px;
+                font-size: 30px;
+                margin-bottom: 30px;
             }
 
             button {
@@ -404,9 +506,115 @@
             </div>
             <div class="form-group checkbox-wrapper">
                 <input type="checkbox" id="rename">
-                <label for="rename" style="margin: 0;">重命名文件（去除特殊字符）</label>
+                <label for="rename" style="margin: 0;">重命名文件</label>
+                <div class="filter-toggle" onclick="toggleFilter(event)">
+                    <span class="filter-arrow">▶</span>
+                </div>
+            </div>
+            <div id="filterPanel" class="filter-panel" style="display: none;">
+                <div class="filter-section">
+                    <label>字符过滤（用逗号分隔）</label>
+                    <input type="text" id="charFilter" placeholder="例如: ?, !, *" onchange="saveFilterRules()">
+                </div>
+                <div class="filter-section">
+                    <label>关键词过滤（每行一个）</label>
+                    <textarea id="keywordFilter" rows="4" placeholder="每行输入一个关键词" onchange="saveFilterRules()"></textarea>
+                </div>
+                <div class="filter-section">
+                    <label>替换规则</label>
+                    <div id="replaceRules">
+                        <div class="replace-rule">
+                            <input type="text" placeholder="查找内容" class="find-text" onchange="saveFilterRules()">
+                            <input type="text" placeholder="替换为" class="replace-text" onchange="saveFilterRules()">
+                            <button type="button" class="remove-rule" onclick="removeReplaceRule(this)">-</button>
+                        </div>
+                    </div>
+                    <button type="button" class="add-rule" onclick="addReplaceRule()">添加规则</button>
+                </div>
             </div>
             <button type="submit" id="submitBtn">开始下载</button>
+
+            <script>
+                function toggleFilter(event) {
+                    event.preventDefault();
+                    const filterPanel = document.getElementById('filterPanel');
+                    const filterArrow = document.querySelector('.filter-arrow');
+                    const isHidden = filterPanel.style.display === 'none';
+                    
+                    filterPanel.style.display = isHidden ? 'block' : 'none';
+                    filterArrow.classList.toggle('expanded');
+                }
+
+                // 页面加载时加载过滤规则
+                window.addEventListener('load', loadFilterRules);
+
+                async function loadFilterRules() {
+                    try {
+                        const response = await fetch('/filter_rules');
+                        if (response.ok) {
+                            const rules = await response.json();
+                            document.getElementById('charFilter').value = rules.remove_chars.join(',');
+                            document.getElementById('keywordFilter').value = rules.remove_words.join('\n');
+                            
+                            // 清空现有替换规则
+                            const rulesContainer = document.getElementById('replaceRules');
+                            rulesContainer.innerHTML = '';
+                            
+                            // 添加替换规则
+                            rules.replace_rules.forEach(rule => {
+                                addReplaceRule(rule.from, rule.to);
+                            });
+                        }
+                    } catch (error) {
+                        console.error('加载过滤规则失败:', error);
+                    }
+                }
+
+                async function saveFilterRules() {
+                    const charFilter = document.getElementById('charFilter').value;
+                    const keywordFilter = document.getElementById('keywordFilter').value;
+                    const replaceRules = Array.from(document.querySelectorAll('.replace-rule')).map(rule => ({
+                        from: rule.querySelector('.find-text').value,
+                        to: rule.querySelector('.replace-text').value
+                    })).filter(rule => rule.from && rule.to);
+
+                    const rules = {
+                        remove_chars: charFilter.split(',').map(char => char.trim()).filter(char => char),
+                        remove_words: keywordFilter.split('\n').map(word => word.trim()).filter(word => word),
+                        replace_rules: replaceRules
+                    };
+
+                    try {
+                        const response = await fetch('/filter_rules', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(rules)
+                        });
+                        if (!response.ok) {
+                            throw new Error('保存过滤规则失败');
+                        }
+                    } catch (error) {
+                        console.error('保存过滤规则失败:', error);
+                    }
+                }
+
+                function addReplaceRule(from = '', to = '') {
+                    const rulesContainer = document.getElementById('replaceRules');
+                    const newRule = document.createElement('div');
+                    newRule.className = 'replace-rule';
+                    newRule.innerHTML = `
+                        <input type="text" placeholder="查找内容" class="find-text" value="${from}" onchange="saveFilterRules()">
+                        <input type="text" placeholder="替换为" class="replace-text" value="${to}" onchange="saveFilterRules()">
+                        <button type="button" class="remove-rule" onclick="removeReplaceRule(this)">-</button>
+                    `;
+                    rulesContainer.appendChild(newRule);
+                }
+
+                function removeReplaceRule(button) {
+                    button.closest('.replace-rule').remove();
+                    saveFilterRules();
+                }
+            </script>
         </form>
 
         <div id="status" class="status" style="display: none;"></div>
@@ -639,4 +847,4 @@
         }
     </script>
 </body>
-</html> 
+</html>

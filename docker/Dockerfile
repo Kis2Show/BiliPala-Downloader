@@ -15,8 +15,8 @@ RUN apk add --no-cache --virtual .build-deps \
     make \
     pkgconf
 
-# 安装 ffmpeg
-RUN apk add --no-cache ffmpeg
+# 安装 ffmpeg 和其他运行时依赖
+RUN apk add --no-cache ffmpeg python3-dev gcc musl-dev libffi-dev
 
 # 安装Python依赖
 COPY requirements.txt .
@@ -31,7 +31,7 @@ FROM python:3.9-alpine
 WORKDIR /app
 
 # 安装运行时依赖
-RUN apk add --no-cache ffmpeg \
+RUN apk add --no-cache ffmpeg python3-dev gcc musl-dev libffi-dev \
     && addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # 从构建阶段复制Python包
@@ -44,7 +44,7 @@ COPY requirements.txt .
 COPY .env.example .env
 
 # 创建数据目录并设置权限
-RUN mkdir -p /app/Audiobooks \
+RUN mkdir -p /app/audiobooks \
     && mkdir -p /app/download_tasks \
     && mkdir -p /app/download_history \
     && mkdir -p /app/config \
@@ -55,7 +55,7 @@ RUN mkdir -p /app/Audiobooks \
 EXPOSE 5000
 
 # 设置数据卷
-VOLUME ["/app/Audiobooks", "/app/download_tasks", "/app/download_history", "/app/config"]
+VOLUME ["/app/audiobooks", "/app/download_tasks", "/app/download_history", "/app/config"]
 
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \

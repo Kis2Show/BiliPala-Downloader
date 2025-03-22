@@ -1,0 +1,39 @@
+name: Monitor yt-dlp Updates
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 每天运行一次
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  check-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get latest yt-dlp version
+        id: ytdlp
+        run: |
+          LATEST_VERSION=$(curl -s https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest | jq -r .tag_name)
+          echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          CURRENT_VERSION=$(grep -oP 'yt-dlp>=?\K[\d\.]+' requirements.txt || echo "0.0.0")
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update requirements.txt
+        if: steps.ytdlp.outputs.latest_version != steps.ytdlp.outputs.current_version
+        run: |
+          sed -i "s/yt-dlp>=\{0,1\}[0-9.]\+/yt-dlp>=${LATEST_VERSION}/" requirements.txt
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add requirements.txt
+          git commit -m "chore: update yt-dlp to ${LATEST_VERSION}"
+          git push
+
+      - name: Trigger Docker build workflow
+        if: steps.ytdlp.outputs.latest_version != steps.ytdlp.outputs.current_version
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.REPO_ACCESS_TOKEN }}
+          event-type: update-yt-dlp
+          client-payload: '{"version": "${{ steps.ytdlp.outputs.latest_version }}"}'

@@ -2,7 +2,7 @@ import yt_dlp
 import os
 import re
 import requests
-from typing import Generator, Dict, Any
+from typing import Generator, Dict, Any, List, Tuple
 from PIL import Image, ImageFilter, ImageOps, ImageDraw
 from io import BytesIO
 import mutagen
@@ -16,6 +16,7 @@ import hashlib
 import threading
 import random
 import math
+import urllib.parse
 
 # 配置日志
 logging.basicConfig(
@@ -27,6 +28,14 @@ logger = logging.getLogger('BiliDownloader')
 
 class BiliDownloader:
     def __init__(self):
+        # 检查yt-dlp版本
+        try:
+            import yt_dlp.version
+            yt_dlp_version = yt_dlp.version.__version__
+            logger.info(f"使用 yt-dlp 版本: {yt_dlp_version}")
+        except (ImportError, AttributeError):
+            logger.warning("无法确定 yt-dlp 版本，可能会影响下载功能")
+            
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': 'https://www.bilibili.com',
@@ -39,6 +48,7 @@ class BiliDownloader:
             'Pragma': 'no-cache'
         }
         self.base_url = "https://www.bilibili.com/video/"
+        self.series_api_url = "https://api.bilibili.com/x/polymer/web-space/seasons_archives_list"
         self.history_dir = "download_history"
         self.task_dir = "download_tasks"
         os.makedirs(self.history_dir, exist_ok=True)
@@ -402,23 +412,32 @@ class BiliDownloader:
 
         # 配置下载选项
         ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(base_path, '%(title)s.%(ext)s'),
+            # 视频格式设置
+            'format': 'bestaudio/best',  # 选择最佳音频质量
+            'outtmpl': os.path.join(base_path, '%(title)s.%(ext)s'),  # 输出文件名模板
+            
+            # 后处理配置
             'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': os.getenv('AUDIO_QUALITY', '192k'),
+                'key': 'FFmpegExtractAudio',  # 使用FFmpeg提取音频
+                'preferredcodec': 'mp3',      # 转换为MP3格式
+                'preferredquality': os.getenv('AUDIO_QUALITY', '192k'),  # 音质设置，默认192k
             }],
-            'writethumbnail': False,  # 先不下载封面
-            'ignoreerrors': True,
-            'quiet': False,
-            'no_warnings': False,
-            'continuedl': True,  # 支持断点续传
-            'noprogress': False,
-            'progress_hooks': [progress_hook],
-            'retries': max_retries,
-            'socket_timeout': timeout,
-            'concurrent_fragment_downloads': concurrent_downloads,
+            
+            # 下载行为设置
+            'writethumbnail': False,  # 不下载缩略图（我们会单独处理封面）
+            'ignoreerrors': True,     # 忽略错误继续下载
+            'quiet': False,           # 显示下载信息
+            'no_warnings': False,     # 显示警告信息
+            'continue': True,         # 支持断点续传（注意：2025版本使用continue代替了旧版的continuedl）
+            'noprogress': False,      # 显示进度条
+            
+            # 网络相关设置
+            'retries': max_retries,   # 重试次数
+            'socket_timeout': timeout,  # 连接超时时间
+            'concurrent_fragment_downloads': concurrent_downloads,  # 并发下载片段数
+            
+            # 进度回调
+            'progress_hooks': [progress_hook],  # 进度回调函数
         }
 
         count = self.check_playlist(bvid)
@@ -456,8 +475,14 @@ class BiliDownloader:
             try:
                 # 首先获取视频信息
                 with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    title = info.get('title', '')
+                    try:
+                        info = ydl.extract_info(url, download=False)
+                        if not info:
+                            raise ValueError(f"无法获取视频信息：{url}")
+                        title = info.get('title', '')
+                    except Exception as extract_error:
+                        logger.error(f"提取视频信息失败：{str(extract_error)}")
+                        raise ValueError(f"提取视频信息失败：{str(extract_error)}")
                 
                 # 检查是否已下载，支持断点续传
                 is_downloaded, existing_file, can_resume = self.is_downloaded(bvid, p, info)
@@ -480,9 +505,20 @@ class BiliDownloader:
                     logger.info("开始下载音频")
                     
                     # 创建下载线程
+                    def download_target():
+                        try:
+                            ydl.download([url])
+                        except Exception as download_err:
+                            logger.error(f"下载线程发生错误: {str(download_err)}")
+                            # 将错误放入队列
+                            progress_queue.append({
+                                'status': 'error',
+                                'message': f'下载过程中出错: {str(download_err)}',
+                                'progress': 0
+                            })
+                    
                     download_thread = threading.Thread(
-                        target=ydl.download,
-                        args=([url],)
+                        target=download_target
                     )
                     download_thread.start()
                     
@@ -510,7 +546,17 @@ class BiliDownloader:
                         yield progress_info
                     
                     download_thread.join()
-                    info = ydl.extract_info(url, download=False)
+                    
+                    # 重新获取最终信息
+                    try:
+                        info = ydl.extract_info(url, download=False)
+                        if not info:
+                            logger.warning(f"下载完成但无法获取最终视频信息：{url}")
+                    except Exception as e:
+                        logger.error(f"获取最终视频信息失败：{str(e)}")
+                        # 如果无法获取最终信息，使用原始信息
+                        pass
+                        
                     title = info.get('title', '')
                 
                 # 获取原始文件名（不带扩展名）
@@ -686,3 +732,170 @@ class BiliDownloader:
         except Exception as e:
             logger.error(f"处理封面时出错: {str(e)}")
             return None
+
+    def extract_series_info(self, url: str) -> Tuple[str, str]:
+        """从合集链接中提取UP主ID和合集ID"""
+        try:
+            # 尝试直接从URL中提取uid和sid
+            uid_match = re.search(r'(?:/|^)(\d+)(?:/|$)', url)
+            # 支持两种格式：
+            # 1. sid=数字
+            # 2. /lists/数字
+            sid_match = re.search(r'(?:sid=|/lists/)(\d+)(?:$|[^\d])', url)
+            
+            if not uid_match:
+                raise ValueError("无法提取UP主ID")
+            if not sid_match:
+                raise ValueError("无法提取合集ID")
+            
+            uid = uid_match.group(1)
+            sid = sid_match.group(1)
+            
+            logger.info(f"成功解析合集信息：UP主ID={uid}, 合集ID={sid}")
+            return uid, sid
+        except Exception as e:
+            logger.error(f"解析合集链接失败：{str(e)}")
+            raise ValueError("无效的合集链接格式")
+
+    def get_series_videos(self, uid: str, sid: str) -> List[Dict[str, Any]]:
+        """获取合集中的所有视频信息"""
+        videos = []
+        page = 1
+        page_size = 30
+        
+        try:
+            while True:
+                # 构造API请求
+                params = {
+                    'mid': uid,
+                    'season_id': sid,
+                    'sort_reverse': False,
+                    'page_num': page,
+                    'page_size': page_size
+                }
+                
+                # 发送请求
+                response = requests.get(
+                    self.series_api_url,
+                    params=params,
+                    headers=self.headers
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                if data['code'] != 0:
+                    raise ValueError(f"API错误：{data.get('message', '未知错误')}")
+                
+                # 提取视频信息
+                archives = data['data']['archives']
+                if not archives:
+                    break
+                
+                for video in archives:
+                    videos.append({
+                        'bvid': video['bvid'],
+                        'title': video['title'],
+                        'description': video.get('description', ''),
+                        'duration': video.get('duration', 0),
+                        'created': video.get('ctime', 0)
+                    })
+                
+                # 检查是否还有更多页
+                if len(archives) < page_size:
+                    break
+                    
+                page += 1
+                time.sleep(1)  # 避免请求过快
+            
+            logger.info(f"成功获取合集视频列表：{len(videos)} 个视频")
+            return videos
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"请求合集API失败：{str(e)}")
+            raise ValueError("获取合集信息失败，请检查网络连接")
+        except Exception as e:
+            logger.error(f"处理合集信息失败：{str(e)}")
+            raise ValueError(f"处理合集信息失败：{str(e)}")
+
+    def download_series(self, url: str, output_dir: str, rename: bool = False) -> Generator[Dict[str, Any], None, None]:
+        """下载整个合集"""
+        try:
+            # 解析合集链接
+            uid, sid = self.extract_series_info(url)
+            
+            # 获取合集中的所有视频
+            videos = self.get_series_videos(uid, sid)
+            total_videos = len(videos)
+            
+            if not videos:
+                raise ValueError("未找到任何视频")
+            
+            logger.info(f"开始下载合集：共 {total_videos} 个视频")
+            
+            # 创建合集目录
+            series_dir = os.path.join(output_dir, f"series_{sid}")
+            os.makedirs(series_dir, exist_ok=True)
+            
+            completed_count = 0
+            total_progress = 0
+            
+            # 遍历下载每个视频
+            for index, video in enumerate(videos, 1):
+                bvid = video['bvid']
+                video_progress = 0
+                
+                try:
+                    logger.info(f"开始下载第 {index}/{total_videos} 个视频：{bvid}")
+                    
+                    # 使用生成器下载单个视频
+                    for progress_info in self.download(bvid, series_dir, rename):
+                        if progress_info['status'] == 'progress':
+                            # 计算整体进度
+                            video_progress = progress_info['progress']
+                            total_progress = (completed_count * 100 + video_progress) / total_videos
+                            
+                            # 更新进度信息
+                            progress_info.update({
+                                'series_progress': total_progress,
+                                'current_video': index,
+                                'total_videos': total_videos,
+                                'video_title': video['title']
+                            })
+                        
+                        yield progress_info
+                    
+                    completed_count += 1
+                    logger.info(f"视频 {bvid} 下载完成")
+                    
+                except Exception as e:
+                    logger.error(f"下载视频 {bvid} 失败：{str(e)}")
+                    yield {
+                        'status': 'error',
+                        'message': f'下载视频失败：{str(e)}',
+                        'series_progress': total_progress,
+                        'current_video': index,
+                        'total_videos': total_videos,
+                        'video_title': video['title']
+                    }
+                
+                # 添加延迟，避免请求过快
+                time.sleep(2)
+            
+            logger.info(f"合集下载完成：成功 {completed_count}/{total_videos}")
+            
+        except Exception as e:
+            logger.error(f"下载合集失败：{str(e)}")
+            yield {
+                'status': 'error',
+                'message': f'下载合集失败：{str(e)}'
+            }
+
+    def is_series_url(self, url: str) -> bool:
+        """判断是否包含合集信息"""
+        try:
+            # 检查是否同时包含uid和sid
+            has_uid = bool(re.search(r'(?:/|^)(\d+)(?:/|$)', url))
+            has_sid = bool(re.search(r'(?:sid=|/lists/)(\d+)(?:$|[^\d])', url))
+            return has_uid and has_sid
+        except:
+            return False

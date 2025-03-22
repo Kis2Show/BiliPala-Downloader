@@ -1,9 +1,11 @@
-from flask import Flask, render_template, request, jsonify, Response
+from flask import Flask, render_template, request, jsonify, Response, send_from_directory
 from utils.task_manager import TaskManager
 import os
 import json
 import logging
 from datetime import datetime
+import threading
+from utils.downloader import BiliDownloader
 
 # 配置日志
 logging.basicConfig(
@@ -15,6 +17,7 @@ logger = logging.getLogger('BiliDownloader-Web')
 
 app = Flask(__name__)
 task_manager = TaskManager()
+downloader = BiliDownloader()
 
 @app.route('/')
 def index():
@@ -23,41 +26,114 @@ def index():
 
 @app.route('/check_playlist', methods=['POST'])
 def check_playlist():
-    data = request.get_json()
-    bvid = data.get('bvid')
-    logger.info(f"检查播放列表：{bvid}")
     try:
-        count = task_manager.downloader.check_playlist(bvid)
-        logger.info(f"播放列表检查完成：{count} 个视频")
+        data = request.get_json()
+        bvid = data.get('bvid')
+        if not bvid:
+            return jsonify({'success': False, 'error': '缺少BV号'})
+        
+        count = downloader.check_playlist(bvid)
         return jsonify({'success': True, 'count': count})
     except Exception as e:
-        logger.error(f"播放列表检查失败：{str(e)}")
+        logger.error(f"检查播放列表失败：{str(e)}")
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/download', methods=['POST'])
-def download():
-    data = request.get_json()
-    bvid = data.get('bvid')
-    output_dir = data.get('output_dir')
-    rename = data.get('rename', False)
-    
-    if not bvid or not output_dir:
-        logger.error("下载请求缺少必要参数")
-        return jsonify({'error': '缺少必要参数'}), 400
-    
-    logger.info(f"开始下载任务：bvid={bvid}, output_dir={output_dir}, rename={rename}")
-    
+def start_download():
     try:
-        # 创建新任务
-        task_id = task_manager.create_task(bvid, output_dir, rename)
+        data = request.get_json()
+        bvid = data.get('bvid')
+        output_dir = data.get('output_dir', '')
+        rename = data.get('rename', False)
+        
+        if not bvid or not output_dir:
+            return jsonify({'success': False, 'error': '缺少必要参数'})
+        
+        # 创建任务
+        task_id = task_manager.create_task(bvid=bvid, output_dir=output_dir, rename=rename)
+        
+        # 启动下载线程
+        def download_thread():
+            try:
+                for progress in downloader.download(bvid, output_dir, rename):
+                    task_manager.update_task(task_id, progress)
+            except Exception as e:
+                logger.error(f"下载失败：{str(e)}")
+                task_manager.update_task(task_id, {
+                    'status': 'failed',
+                    'error': str(e)
+                })
+        
+        thread = threading.Thread(target=download_thread)
+        thread.start()
+        
         return jsonify({
             'success': True,
             'task_id': task_id,
-            'message': '任务已创建并开始下载'
+            'message': '下载任务已创建'
         })
+        
     except Exception as e:
         logger.error(f"创建下载任务失败：{str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/download_series', methods=['POST'])
+def start_series_download():
+    try:
+        data = request.get_json()
+        url = data.get('url')
+        output_dir = data.get('output_dir', '')
+        rename = data.get('rename', False)
+        
+        if not url or not output_dir:
+            return jsonify({'success': False, 'error': '缺少必要参数'})
+        
+        # 验证是否为合集链接
+        if not downloader.is_series_url(url):
+            return jsonify({'success': False, 'error': '无效的合集链接'})
+        
+        # 解析合集信息
+        uid, sid = downloader.extract_series_info(url)
+        
+        # 创建合集任务
+        task_id = task_manager.create_task(
+            series_id=sid,
+            output_dir=output_dir,
+            rename=rename,
+            is_series=True
+        )
+        
+        # 启动下载线程
+        def download_series_thread():
+            try:
+                for progress in downloader.download_series(url, output_dir, rename):
+                    # 更新任务状态，添加合集相关信息
+                    progress.update({
+                        'series_id': sid,
+                        'is_series': True
+                    })
+                    task_manager.update_task(task_id, progress)
+            except Exception as e:
+                logger.error(f"合集下载失败：{str(e)}")
+                task_manager.update_task(task_id, {
+                    'status': 'failed',
+                    'error': str(e),
+                    'series_id': sid,
+                    'is_series': True
+                })
+        
+        thread = threading.Thread(target=download_series_thread)
+        thread.start()
+        
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': '合集下载任务已创建'
+        })
+        
+    except Exception as e:
+        logger.error(f"创建合集下载任务失败：{str(e)}")
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/task_status', methods=['GET'])
 def task_status():
@@ -65,7 +141,7 @@ def task_status():
     if not task_id:
         return jsonify({'error': '缺少task_id参数'}), 400
     
-    status = task_manager.get_task_status(task_id)
+    status = task_manager.get_task(task_id)
     if not status:
         return jsonify({'error': '任务不存在'}), 404
     
@@ -74,8 +150,8 @@ def task_status():
 @app.route('/active_tasks', methods=['GET'])
 def get_active_tasks():
     """获取所有活动任务"""
-    tasks = task_manager.get_all_tasks()
-    return jsonify({'tasks': list(tasks.values())})
+    tasks = task_manager.get_active_tasks()
+    return jsonify({'tasks': tasks})
 
 @app.route('/latest_task', methods=['GET'])
 def latest_task():

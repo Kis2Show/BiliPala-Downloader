@@ -393,7 +393,10 @@
         <form id="downloadForm" onsubmit="startDownload(event)">
             <div class="form-group">
                 <label for="url">视频链接</label>
-                <input type="url" id="url" required placeholder="请输入B站视频链接">
+                <input type="url" id="url" required placeholder="请输入B站视频链接或合集链接">
+                <div class="url-hint" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                    支持：单个视频、多P视频、合集链接 (例如：https://space.bilibili.com/xxx/lists?sid=xxx)
+                </div>
             </div>
             <div class="form-group">
                 <label for="outputDir">保存位置</label>
@@ -475,46 +478,70 @@
             const submitBtn = document.getElementById('submitBtn');
             const status = document.getElementById('status');
             
-            // 从URL中提取BV号
-            const bvMatch = url.match(/BV[a-zA-Z0-9]+/);
-            if (!bvMatch) {
-                showError('无效的B站视频链接');
-                return;
-            }
-            const bvid = bvMatch[0];
-
+            // 使用正则表达式检查是否是合集链接（同时包含uid和sid）
+            const hasUid = /(?:\/|^)(\d+)(?:\/|$)/.test(url);
+            const hasSid = /(?:sid=|\/lists\/)(\d+)(?:$|[^\d])/.test(url);
+            const isSeriesUrl = hasUid && hasSid;
+            
             try {
                 submitBtn.disabled = true;
                 status.style.display = 'block';
                 status.className = 'status info';
-                status.textContent = '正在检查播放列表...';
-
-                // 检查播放列表
-                const checkResponse = await fetch('/check_playlist', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({bvid})
-                });
-                const checkResult = await checkResponse.json();
                 
-                if (!checkResult.success) {
-                    throw new Error(checkResult.error);
-                }
+                if (isSeriesUrl) {
+                    status.textContent = '正在获取合集信息...';
+                    // 开始合集下载
+                    const downloadResponse = await fetch('/download_series', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({url, output_dir: outputDir, rename})
+                    });
+                    const downloadResult = await downloadResponse.json();
+                    
+                    if (!downloadResult.success) {
+                        throw new Error(downloadResult.error);
+                    }
+                    
+                    currentTaskId = downloadResult.task_id;
+                    showSuccess('合集下载任务已创建');
+                } else {
+                    // 从URL中提取BV号
+                    const bvMatch = url.match(/BV[a-zA-Z0-9]+/);
+                    if (!bvMatch) {
+                        showError('无效的B站视频链接');
+                        return;
+                    }
+                    const bvid = bvMatch[0];
 
-                // 开始下载
-                const downloadResponse = await fetch('/download', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({bvid, output_dir: outputDir, rename})
-                });
-                const downloadResult = await downloadResponse.json();
+                    // 检查播放列表
+                    status.textContent = '正在检查播放列表...';
+                    const checkResponse = await fetch('/check_playlist', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({bvid})
+                    });
+                    const checkResult = await checkResponse.json();
+                    
+                    if (!checkResult.success) {
+                        throw new Error(checkResult.error);
+                    }
+
+                    // 开始下载
+                    const downloadResponse = await fetch('/download', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({bvid, output_dir: outputDir, rename})
+                    });
+                    const downloadResult = await downloadResponse.json();
+                    
+                    if (!downloadResult.success) {
+                        throw new Error(downloadResult.error);
+                    }
+
+                    currentTaskId = downloadResult.task_id;
+                    showSuccess('下载任务已创建');
+                }
                 
-                if (!downloadResult.success) {
-                    throw new Error(downloadResult.error);
-                }
-
-                currentTaskId = downloadResult.task_id;
-                showSuccess('下载任务已创建');
                 updateTaskList();
             } catch (error) {
                 showError(error.message);
@@ -558,11 +585,14 @@
                     taskList.removeChild(taskList.lastChild);
                 }
 
-                // 按创建时间排序并去重（基于BV号）
+                // 按创建时间排序并去重（基于BV号或合集ID）
                 const uniqueTasks = data.tasks
                     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
                     .filter((task, index, self) => 
-                        index === self.findIndex(t => t.bvid === task.bvid)
+                        index === self.findIndex(t => 
+                            (t.bvid && t.bvid === task.bvid) || 
+                            (t.series_id && t.series_id === task.series_id)
+                        )
                     )
                     .slice(0, 3);  // 只取最近的3个不重复任务
 
@@ -570,18 +600,37 @@
                 uniqueTasks.forEach(task => {
                     const taskElement = document.createElement('div');
                     taskElement.className = 'task-item';
-                    taskElement.innerHTML = `
+                    
+                    // 构建任务内容
+                    let content = `
                         <div class="task-header">
                             <div class="task-title">${task.title || '获取中...'}</div>
+                    `;
+                    
+                    if (task.series_id) {
+                        // 合集任务显示
+                        content += `
+                            <div class="task-info">合集ID：${task.series_id}</div>
+                            <div class="task-info">进度：${task.current_video || 0}/${task.total_videos || '?'} 个视频</div>
+                        `;
+                    } else {
+                        // 单个视频任务显示
+                        content += `
                             <div class="task-bvid">BV号：${task.bvid}</div>
+                        `;
+                    }
+                    
+                    content += `
                         </div>
                         <div class="task-info">输出目录：${task.output_dir}</div>
                         <div class="progress-bar">
-                            <div class="progress-bar-fill" style="width: ${task.progress}%"></div>
+                            <div class="progress-bar-fill" style="width: ${task.series_progress || task.progress}%"></div>
                         </div>
-                        <div class="task-info">进度：${task.progress.toFixed(2)}%</div>
+                        <div class="task-info">进度：${(task.series_progress || task.progress).toFixed(2)}%</div>
                         ${task.error ? `<div class="error-message">错误：${task.error}</div>` : ''}
                     `;
+                    
+                    taskElement.innerHTML = content;
                     taskList.appendChild(taskElement);
                 });
             } catch (error) {
